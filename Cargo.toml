@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "warpforge-api",
+  "warpforge-cli",
+]
+

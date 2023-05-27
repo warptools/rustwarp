@@ -1,0 +1,11 @@
+[package]
+name = "warpforge-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+indexmap = { version = "1.9.3", features = ["serde"] }
+indoc = "2.0.1"
+serde = { version = "1.0.163", features = ["derive"] }
+serde_json = { version = "1.0.96", features = ["preserve_order"] }
+serde_with = "3.0.0"
