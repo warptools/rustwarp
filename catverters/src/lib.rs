@@ -8,6 +8,19 @@ Some notes about macros:
         - Since we're generating stringers that you might actually use in debugging, this is... not ideal.
     - Downside: if there's a compile error within the generated output (that is, token stream is valid, just not typechecking)... the users gets all errors pointing at just the one macro line.
         - If using the '-Z macro-backtrace' feature of the compiler, this probably isn't a problem.  (I don't know why Rust doesn't ship that beyond nightlies.  It's so useful.)
+- There's different kinds of things i'd have called attributes.
+    - a `proc_macro_attribute` is for parsing stuff like `#[foobar(key = "value")]`.
+    - apparently there's also just "non-macro attributes", and that's what `#[foobar = "value"]` is (... I infer, from trying to grok some compiler error messages?).
+    - oh wow there's also "derive macro helper attributes", and that's a whole other thing.
+    - ... I still have very little idea what's going on here.  There's a lot of twisty little passages here, very much alike, except for the ways in which they're not.
+    - https://doc.rust-lang.org/reference/procedural-macros.html#derive-macro-helper-attributes is one of several docs I wish I had found much earlier than I did.
+
+If you're looking for alternative crates that do similar things to this:
+
+- https://jeltef.github.io/derive_more/derive_more/display.html looks a bit close!
+    - It's more powerful.  You can customize quite a bit with its annotations, including even handing more code strings into its macros.
+    - It's just the Display part, not the FromStr part.
+        - https://jeltef.github.io/derive_more/derive_more/from_str.html does exist, but it's only for structs with one field -- very very limited.
 
 */
 
@@ -36,7 +49,7 @@ use syn::{parse_macro_input, DeriveInput};
 /// For enums, the discrimant string will be prefixed, then the separator,
 /// then the member value a string; parsing is the reverse.
 /// The discriminant is the variant name by default,
-/// but can be overriden with an annotation.  TODO how??
+/// but can be overriden with an annotation: `#[discriminant = "override"]` on a member does the trick.
 ///
 /// For structs, each field is stringified, and they are joined by the separator.
 /// Parsing splits on the separator, greedily
@@ -44,8 +57,7 @@ use syn::{parse_macro_input, DeriveInput};
 /// end up treated as part of string of the final value of the struct, and handed to that type to process further).
 ///
 /// TODO: separators aren't configurable!  Coming soon!
-/// TODO: discriminants aren't overridable!  Coming soon!
-#[proc_macro_derive(Stringoid)]
+#[proc_macro_derive(Stringoid, attributes(discriminant))]
 pub fn derive_stringoid(input: TokenStream) -> TokenStream {
     let DeriveInput { ident, data, .. } = parse_macro_input!(input as DeriveInput);
 
@@ -115,7 +127,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
         syn::Data::Enum(typ) => {
             let arms = typ.variants.iter().map(|variant: &syn::Variant| {
                 let variant_name = &variant.ident;
-                let variant_descrim = variant_name; // TODO: make this customizable.  Does `get_variant_discriminant(variant)` do it?
+                let variant_descrim = get_variant_discriminant(variant);
 
                 // Write the match arm.
                 //  This starts with the match pattern, which is the variant type name.
@@ -124,7 +136,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
                 //   and stringify it as best it can... which means it's going to look for Display traits, and thus should compose nicely.
                 quote! {
                   #ident::#variant_name ( val ) => {
-                    write!(f, "{}:{}", stringify!(#variant_descrim), val)
+                    write!(f, "{}:{}", #variant_descrim, val)
                   }
                 }
             });
@@ -166,7 +178,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
                     })
                 }
             }
-            syn::Fields::Unnamed(fields) => {
+            syn::Fields::Unnamed(_) => {
                 quote! {
                     Err(<Self as std::str::FromStr>::Err::from("not yet implemented"))
                 }
@@ -176,7 +188,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
         syn::Data::Enum(typ) => {
             let arms = typ.variants.iter().map(|variant: &syn::Variant| {
                 let variant_name = &variant.ident;
-                let variant_descrim = variant_name; // TODO: make this customizable.  Does `get_variant_discriminant(variant)` do it?
+                let variant_descrim = get_variant_discriminant(variant);
 		    let variant_type = match &variant.fields {
 			syn::Fields::Named(fields) => {
 				if fields.named.len() != 1 {
@@ -199,7 +211,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 		    //  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
 		    // TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
                 quote! {
-                  stringify!(#variant_descrim) => {
+                  #variant_descrim => {
 				let inhabitant = <#variant_type>::from_str(rest)?;
 				Ok(#ident::#variant_name(inhabitant))
 			}
@@ -212,7 +224,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
             let (prefix, rest) = s.split_once(':').ok_or("wrong number of separators")?;
             match prefix {
                 #(#arms),*,
-            _ => Err(<Self as std::str::FromStr>::Err::from("Unknown discriminant")),
+                _ => Err(<Self as std::str::FromStr>::Err::from("Unknown discriminant")),
             }
             }
         }
@@ -247,35 +259,22 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
     .into()
 }
 
-fn get_variant_discriminant(variant: &syn::Variant) -> proc_macro2::TokenStream {
-    let variant_ident = &variant.ident;
-
+// Returns a string -- unquoted -- for the variant discriminator.
+// If it's been annotated explicitly, you get that string.
+// Otherwise, you get the variant's name.
+fn get_variant_discriminant(variant: &syn::Variant) -> String {
     variant
         .attrs
         .iter()
         .find_map(|attr| {
             if attr.path.is_ident("discriminant") {
-                match attr.parse_meta() {
-                    Ok(syn::Meta::List(meta_list)) => {
-                        if meta_list.nested.len() == 1 {
-                            if let syn::NestedMeta::Lit(lit) = &meta_list.nested[0] {
-                                if let syn::Lit::Str(lit_str) = lit {
-                                    return Some(quote! {
-                                      #lit_str
-                                    });
-                                }
-                            }
-                        }
+                if let Ok(syn::Meta::NameValue(meta_name_value)) = attr.parse_meta() {
+                    if let syn::Lit::Str(lit_str) = meta_name_value.lit {
+                        return Some(lit_str.value());
                     }
-                    _ => {}
                 }
             }
-
             None
         })
-        .unwrap_or_else(|| {
-            quote! {
-                stringify!(#variant_ident)
-            }
-        })
+        .unwrap_or_else(|| variant.ident.to_string())
 }

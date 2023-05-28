@@ -54,8 +54,8 @@ extern crate catverters;
 enum MyEnum {
     First(FirstVariant),
     Second(SecondVariant),
+    #[discriminant = "override"]
     Third(ThirdVariant),
-    //#[discriminant = "override"]
 }
 
 #[derive(Debug, catverters::Stringoid)]
@@ -81,7 +81,16 @@ fn main() {
     println!("Described: {:?}", my_enum.describe());
     println!("Magic?: {:?}", my_enum.to_string());
 
+    let e2 = MyEnum::Third(ThirdVariant {
+        val: "zow".to_string(),
+    });
+    println!("Magic?: {:?}", e2.to_string());
+
     let parsed_enum: Result<MyEnum, _> = "Second:hello".parse();
+    println!("Parsed enum value: {:?}", parsed_enum);
+    println!("Re-displayed enum value: {}", parsed_enum.unwrap());
+
+    let parsed_enum: Result<MyEnum, _> = "override:yo".parse();
     println!("Parsed enum value: {:?}", parsed_enum);
     println!("Re-displayed enum value: {}", parsed_enum.unwrap());
 }
