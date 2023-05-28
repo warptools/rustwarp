@@ -2,6 +2,12 @@
 Some notes about macros:
 
 - The docs at https://developerlife.com/2022/03/30/rust-proc-macro/ are pretty wonderful.
+- Doing several features together in one macro like this has some consequences...
+    - The upside is fewer macros for the user to be bothered with calling, obviously.
+    - Downside: it's all or nothing.  If there's a panic or invalid token streams from any of the work, then you don't get *any* usable result.
+        - Since we're generating stringers that you might actually use in debugging, this is... not ideal.
+    - Downside: if there's a compile error within the generated output (that is, token stream is valid, just not typechecking)... the users gets all errors pointing at just the one macro line.
+        - If using the '-Z macro-backtrace' feature of the compiler, this probably isn't a problem.  (I don't know why Rust doesn't ship that beyond nightlies.  It's so useful.)
 
 */
 
@@ -70,7 +76,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
         syn::Data::Union(_) => panic!("unsupported!"),
     };
 
-    let fmt_body = match &data {
+    let fmt_body: proc_macro2::TokenStream = match &data {
         syn::Data::Struct(typ) => {
             let field_strings = match &typ.fields {
                 syn::Fields::Named(named) => named
@@ -110,14 +116,13 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
         syn::Data::Enum(typ) => {
             let arms = typ.variants.iter().map(|variant: &syn::Variant| {
                 let variant_name = &variant.ident;
-                let variant_descrim = variant_name; // TODO: make this customizable.
+                let variant_descrim = variant_name; // TODO: make this customizable.  Does `get_variant_discriminant(variant)` do it?
 
                 // Write the match arm.
                 //  This starts with the match pattern, which is the variant type name.
                 //  We always call the value "val".
                 //  And we let the write macro, which is ending up in the real output, simply take val,
-                //   and stringify it as best it can... which results in overall correct composition, if everything you've got is using Display/FromStr consistently.
-                //    (It's not particularly compile-time safe if something is inconsistent on that front, though; it's arguably a bit too willing to procede whimsically.)
+                //   and stringify it as best it can... which means it's going to look for Display traits, and thus should compose nicely.
                 quote! {
                   #ident::#variant_name ( val ) => {
                     write!(f, "{}:{}", stringify!(#variant_descrim), val)
@@ -129,6 +134,58 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
               match self {
                 #(#arms),*
                 }
+            }
+        }
+        syn::Data::Union(_) => panic!("unsupported!"),
+    };
+
+    let fromstr_body: proc_macro2::TokenStream = match &data {
+        syn::Data::Struct(typ) => {
+            quote! {
+            Err(<Self as std::str::FromStr>::Err::from("not yet implemented"))
+            } // TODO: come back to this one.
+        }
+        syn::Data::Enum(typ) => {
+            let arms = typ.variants.iter().map(|variant: &syn::Variant| {
+                let variant_name = &variant.ident;
+                let variant_descrim = variant_name; // TODO: make this customizable.  Does `get_variant_discriminant(variant)` do it?
+		    let variant_type = match &variant.fields {
+			syn::Fields::Named(fields) => {
+				if fields.named.len() != 1 {
+					panic!("unsupported!  Stringoid enums must have one type in each of their members.")
+				};
+				fields.named.first()
+			},
+			syn::Fields::Unnamed(fields) =>  {
+				if fields.unnamed.len() != 1 {
+					panic!("unsupported!  Stringoid enums must have one type in each of their members.")
+				};
+				fields.unnamed.first()
+			},
+			syn::Fields::Unit => panic!("unsupported!  Stringoid enums must have one type in each of their members."),
+		  };
+
+                // Write the match arm.
+                //  The string of the descriminator is the match clause;
+		    //  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
+		    //  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
+		    // TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
+                quote! {
+                  stringify!(#variant_descrim) => {
+				let inhabitant = <#variant_type>::from_str(rest)?;
+				Ok(#ident::#variant_name(inhabitant))
+			}
+                }
+            });
+            // The first thing the parse needs to do is split on the separator.
+            // Then it's a matching job: gather up the arms we prepared above.
+            // FUTURE: consider if the error type `serde::de::Error::unknown_variant` might be appropriate.  (This isn't serde, though... so perhaps not.)
+            quote! {
+            let (prefix, rest) = s.split_once(':').ok_or("wrong number of separators")?;
+            match prefix {
+                #(#arms),*,
+            _ => Err(<Self as std::str::FromStr>::Err::from("Unknown discriminant")),
+            }
             }
         }
         syn::Data::Union(_) => panic!("unsupported!"),
@@ -149,6 +206,48 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
             #fmt_body
         }
       }
+
+
+    impl std::str::FromStr for #ident {
+        type Err = Box<dyn std::error::Error>;
+
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+              #fromstr_body
+            }
+        }
     }
     .into()
+}
+
+fn get_variant_discriminant(variant: &syn::Variant) -> proc_macro2::TokenStream {
+    let variant_ident = &variant.ident;
+
+    variant
+        .attrs
+        .iter()
+        .find_map(|attr| {
+            if attr.path.is_ident("discriminant") {
+                match attr.parse_meta() {
+                    Ok(syn::Meta::List(meta_list)) => {
+                        if meta_list.nested.len() == 1 {
+                            if let syn::NestedMeta::Lit(lit) = &meta_list.nested[0] {
+                                if let syn::Lit::Str(lit_str) = lit {
+                                    return Some(quote! {
+                                      #lit_str
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+
+            None
+        })
+        .unwrap_or_else(|| {
+            quote! {
+                stringify!(#variant_ident)
+            }
+        })
 }

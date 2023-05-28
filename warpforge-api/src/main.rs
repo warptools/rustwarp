@@ -55,6 +55,7 @@ enum MyEnum {
     First(FirstVariant),
     Second(SecondVariant),
     Third(ThirdVariant),
+    //#[discriminant = "override"]
 }
 
 #[derive(Debug, catverters::Stringoid)]
@@ -80,8 +81,6 @@ fn main() {
     println!("Described: {:?}", my_enum.describe());
     println!("Magic?: {:?}", my_enum.to_string());
 
-//     let parsed_enum: Result<MyEnum, _> = "second:hello".parse();
-//     if let Ok(enum_value) = parsed_enum {
-//         println!("Parsed enum value: {:?}", enum_value);
-//     }
+    let parsed_enum: Result<MyEnum, _> = "Second:hello".parse();
+    println!("Parsed enum value: {:?}", parsed_enum);
 }
