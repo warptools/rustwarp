@@ -15,6 +15,22 @@ fn test_deserialize_fixture() {
             }
         "#},
     );
+    fixtures.insert(
+        "fixture-2",
+        indoc! {r#"
+            {
+                "scene": {
+                    "fs": {
+                        "/wow": "ware:asdf:qwer"
+                    }
+                },
+                "actions": {
+                    "main": {}
+                },
+                "export": {}
+            }
+        "#},
+    );
 
     for (_name, fixture) in fixtures {
         let value: warpforge_api::Workflow = serde_json::from_str(fixture).unwrap();
