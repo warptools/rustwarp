@@ -43,7 +43,6 @@ use syn::{parse_macro_input, DeriveInput};
 /// (meaning excess instances of the separator are acceptable, and will simply
 /// end up treated as part of string of the final value of the struct, and handed to that type to process further).
 ///
-/// TODO: so far only Display is actually implemented!  FromStr coming soon!
 /// TODO: separators aren't configurable!  Coming soon!
 /// TODO: discriminants aren't overridable!  Coming soon!
 #[proc_macro_derive(Stringoid)]
@@ -79,7 +78,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
     let fmt_body: proc_macro2::TokenStream = match &data {
         syn::Data::Struct(typ) => {
             let field_strings = match &typ.fields {
-                syn::Fields::Named(named) => named
+                syn::Fields::Named(fields) => fields
                     .named
                     .iter()
                     .map(|field| {
@@ -89,7 +88,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
                         }
                     })
                     .collect::<Vec<_>>(),
-                syn::Fields::Unnamed(unnamed) => unnamed
+                syn::Fields::Unnamed(fields) => fields
                     .unnamed
                     .iter()
                     .enumerate()
@@ -140,11 +139,40 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
     };
 
     let fromstr_body: proc_macro2::TokenStream = match &data {
-        syn::Data::Struct(typ) => {
-            quote! {
-            Err(<Self as std::str::FromStr>::Err::from("not yet implemented"))
-            } // TODO: come back to this one.
-        }
+        syn::Data::Struct(typ) => match &typ.fields {
+            syn::Fields::Named(fields) => {
+                // For each field, create a local value of that type and with the same name as the field with a let, and parse into it.
+                let entries = fields.named.iter().map(|field| {
+			  let field_name = &field.ident;
+			  let field_type = &field.ty;
+                    quote! {
+                        let #field_name: #field_type = parts.next().ok_or("unreachable length mismatch")?.parse()?;
+                    }
+                });
+
+                // The whole func body is just splitting on delimiter first,
+                //  then gathering our 'let' lines above,
+                //  then if all that went well, return a success Result containing a struct gathering all the values.
+                // (We're sort of abusing the fact that the field names and our let's above used the same string.  It's positional assignemnt here.)
+                let field_count = fields.named.len();
+                let field_names = fields.named.iter().map(|field| &field.ident);
+                quote! {
+                    let mut parts = s.splitn(#field_count, ':');
+
+                    #(#entries)*
+
+                    Ok(#ident{
+                        #(#field_names),*
+                    })
+                }
+            }
+            syn::Fields::Unnamed(fields) => {
+                quote! {
+                    Err(<Self as std::str::FromStr>::Err::from("not yet implemented"))
+                }
+            }
+            syn::Fields::Unit => panic!("unsupported!"),
+        },
         syn::Data::Enum(typ) => {
             let arms = typ.variants.iter().map(|variant: &syn::Variant| {
                 let variant_name = &variant.ident;

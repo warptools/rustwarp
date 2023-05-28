@@ -83,4 +83,5 @@ fn main() {
 
     let parsed_enum: Result<MyEnum, _> = "Second:hello".parse();
     println!("Parsed enum value: {:?}", parsed_enum);
+    println!("Re-displayed enum value: {}", parsed_enum.unwrap());
 }
