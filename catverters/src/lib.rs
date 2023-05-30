@@ -35,6 +35,14 @@ Some notes about rust enums (aka sum types):
 
 */
 
+/*
+Some notes about other serialization and data munging options out there:
+
+- `#[derive(serde_with::SerializeDisplay, serde_with::DeserializeFromStr, catverters::Stringoid)]` play very very nicely together!
+- https://docs.rs/serde_with/3.0.0/serde_with/guide/serde_as_transformations/index.html describes a lot of good stuff you can do with serde.
+
+*/
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
@@ -217,15 +225,16 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 			}
                 }
             });
+
             // The first thing the parse needs to do is split on the separator.
             // Then it's a matching job: gather up the arms we prepared above.
             // FUTURE: consider if the error type `serde::de::Error::unknown_variant` might be appropriate.  (This isn't serde, though... so perhaps not.)
             quote! {
-            let (prefix, rest) = s.split_once(':').ok_or("wrong number of separators")?;
-            match prefix {
+             let (prefix, rest) = s.split_once(':').ok_or("wrong number of separators")?;
+              match prefix {
                 #(#arms),*,
-                _ => Err(<Self as std::str::FromStr>::Err::from("Unknown discriminant")),
-            }
+                _ => Err(catverters::Error::UnknownDiscriminant{type_name: stringify!(#ident), value: prefix}),
+              }
             }
         }
         syn::Data::Union(_) => panic!("unsupported!"),
@@ -277,4 +286,14 @@ fn get_variant_discriminant(variant: &syn::Variant) -> String {
             None
         })
         .unwrap_or_else(|| variant.ident.to_string())
+}
+
+#[derive(thiserror::Error, Debug)]
+enum Error {
+    #[error("failed to parse {type_name} value: \"{value}\" is not a recognized discriminant")] // (accepted values are {accepted:?})
+    UnknownDiscriminant {
+        type_name: String,
+        value: String,
+      //   accepted: Vec<String>,
+    },
 }
