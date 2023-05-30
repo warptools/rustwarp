@@ -3,5 +3,6 @@ members = [
   "warpforge-api",
   "warpforge-cli",
   "catverters",
+  "catverters-derive",
 ]
 

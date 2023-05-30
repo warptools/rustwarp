@@ -88,10 +88,16 @@ checksum = "a3e2c3daef883ecc1b5d58c15adae93470a91d425f3532ba1695849656af3fc1"
 name = "catverters"
 version = "0.1.0"
 dependencies = [
+ "thiserror",
+]
+
+[[package]]
+name = "catverters-derive"
+version = "0.1.0"
+dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
- "thiserror",
 ]
 
 [[package]]
@@ -579,6 +585,7 @@ name = "warpforge-api"
 version = "0.1.0"
 dependencies = [
  "catverters",
+ "catverters-derive",
  "indexmap",
  "indoc",
  "serde",

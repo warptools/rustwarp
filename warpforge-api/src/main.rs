@@ -36,21 +36,9 @@ impl std::str::FromStr for MyEnum {
 }
 */
 
-#[macro_use]
-extern crate catverters;
+use catverters_derive;
 
-// #[derive(Debug)]
-// enum MyEnum {
-//     #[catverters::strval(discriminant = "first:")]
-//     First(FirstVariant),
-//     #[catverters::strval(discriminant = "second:")]
-//     Second(SecondVariant),
-//     #[catverters::strval(discriminant = "third:")]
-//     Third(ThirdVariant),
-// }
-// catverters::GenerateDisplayAndFromStr!(MyEnum);
-
-#[derive(Debug, catverters::Stringoid)]
+#[derive(Debug, catverters_derive::Stringoid)]
 enum MyEnum {
     First(FirstVariant),
     Second(SecondVariant),
@@ -58,17 +46,17 @@ enum MyEnum {
     Third(ThirdVariant),
 }
 
-#[derive(Debug, catverters::Stringoid)]
+#[derive(Debug, catverters_derive::Stringoid)]
 struct FirstVariant {
     val: String,
 }
 
-#[derive(Debug, catverters::Stringoid)]
+#[derive(Debug, catverters_derive::Stringoid)]
 struct SecondVariant {
     val: String,
 }
 
-#[derive(Debug, catverters::Stringoid)]
+#[derive(Debug, catverters_derive::Stringoid)]
 struct ThirdVariant {
     val: String,
 }

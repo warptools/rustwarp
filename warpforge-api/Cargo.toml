@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 catverters = { path = "../catverters" }
+catverters-derive = { path = "../catverters-derive" }
 
 indexmap = { version = "1.9.3", features = ["serde"] }
 indoc = "2.0.1"

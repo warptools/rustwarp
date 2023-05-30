@@ -1,4 +1,4 @@
-use catverters;
+use catverters_derive;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
@@ -17,14 +17,14 @@ struct Scene {
     fs: IndexMap<String, ContentRef>,
 }
 
-#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters::Stringoid)]
+#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 enum ContentRef {
     #[discriminant = "ware"]
     Ware(WareID),
     // TODO CatalogRef, Ingest, etc, etc.
 }
 
-#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters::Stringoid)]
+#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 struct WareID {
     packtype: String,
     hash: String,
