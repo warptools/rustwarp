@@ -69,7 +69,7 @@ pub fn test_per_file(attr: TokenStream, item: TokenStream) -> TokenStream {
             quote! {
               #[test]
               fn #test_ident() {
-                  super::#function_name(Path::new(stringify!(#path_str)));
+                  super::#function_name(Path::new(#path_str));
               }
             }
         })
