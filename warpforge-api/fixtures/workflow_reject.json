@@ -1,0 +1,10 @@
+{
+	"scene": {
+		"fs": {
+			"/wow": "ware:asdf:qwer"
+		}
+	},
+	"export": {}
+}
+---
+missing field `actions` at line 8 column 1
