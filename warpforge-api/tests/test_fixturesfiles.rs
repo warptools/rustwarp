@@ -24,7 +24,7 @@ Are we gonna just do this again ourselves?  Ugh.  Apparently, yes.
 
 */
 
-// use std::path::Path;
+use std::path::Path;
 // use memchr::memmem;
 use testfiles_derive::test_per_file;
 

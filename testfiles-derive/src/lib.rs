@@ -1,10 +1,7 @@
-
-use glob::glob;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::quote;
 use std::env;
-use std::path::PathBuf;
 use std::result::Result;
 use syn::parse_macro_input;
 
@@ -32,30 +29,48 @@ pub fn test_per_file(attr: TokenStream, item: TokenStream) -> TokenStream {
     //
     // And this only gets us to the crate.  Not the source file.  I guess we'll have to be happy with that.
     let start_path = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let mut search_path = PathBuf::from(start_path);
-    search_path.push(pattern);
 
     // Let the glob library do the walking for us.
-    //  Note that this gets us paths, but it's still going to leave us some future munging to do:
-    //   The env var above gave us an absolute path...
-    //   and this glob library has no concept of working relative to another path parameter, either.
-    //  So, that's gonna leave us stripping prefixes back off, later.  It's unfortunate that this can't be more efficient.
-    let paths: glob::Paths = glob(&search_path.to_string_lossy()).unwrap(); // If this step errors, it's because the pattern didn't compile; we can panic for this.
+    let walker = globwalk::GlobWalkerBuilder::from_patterns(&start_path, &[pattern])
+        .build()
+        .unwrap()
+        .into_iter()
+        .filter_map(Result::ok);
 
     // For each found path: make a new token stream with a test declaration.  Collect a vec.
-    let tests = paths
-        .map(|visit: Result<PathBuf, glob::GlobError>| {
-            let path = visit.unwrap(); // I suppose I/O errors might as well be a panic too; what else should they do?
-            let path_str = path.to_string_lossy(); // Need this because paths aren't tokenizable ;)  Note that this is an absolute path, whether we like it or not.
-		// TODO prefix strip needed as part of constructing test_name.
-            let test_name = path_str.replace(|c: char| !c.is_ascii_alphanumeric(), "_");
-            // TODO might need a super:: in this next bit?
+    let tests = walker
+        .map(|visit: walkdir::DirEntry| {
+            // We'll embed the path as a quoted string in the generated test function.
+            // Note that this is an absolute path.
+            //  The CWD when cargo is running things is the workspace root (may be different than the CARGO_MANIFEST_DIR, which is the crate root),
+            //  but we can totally ignore that since this path is absolute.
+            //  (It also means "don't ship these binaries if you don't want to leak details of your host", but hey, we made this for testing.)
+            let path_str = visit.path().to_string_lossy();
+
+            // We want a test name that's derived from the filename.
+            //  Now here, that globwalk doesn't return paths that are relative to the search root... is annoying.
+            //   I guess we'll just crudely chop off the known prefix.
+            // Then we'll replace any characters that have any chance of being scary.
+            //  (If this produces name collisions, you'll get compile errors; deal with it.)
+            let relevant_path = visit
+                .path()
+                .strip_prefix(start_path.as_str())
+                .unwrap()
+                .to_string_lossy();
+            let test_name = relevant_path.replace(|c: char| !c.is_ascii_alphanumeric(), "_");
+            // Create an `Ident` for the test function name.
+            //  For some reason, `quote!` requires this value in particular to be an `Ident` or it won't insert it.
+            let test_ident = syn::Ident::new(test_name.as_str(), Span::call_site());
+
+            // Now, putting it together is easy: We just want:
+            // - a test function, with the annotation,
+            // - that calls the user's original function (which we'll refer to with "super" because we're going to wrap this in a module),
+            // - and we construct a path from the string we discovered during our walk and give that to them.
             quote! {
-            #[test]
-            fn #test_name() {
-                let p = std::path::Path::new(stringify!(#path_str));
-                #function_name(p);
-            }
+              #[test]
+              fn #test_ident() {
+                  super::#function_name(Path::new(stringify!(#path_str)));
+              }
             }
         })
         .collect::<Vec<_>>();
@@ -63,21 +78,33 @@ pub fn test_per_file(attr: TokenStream, item: TokenStream) -> TokenStream {
         panic!(
             "this glob matched no files!  (hint: your cwd is {:?}.  we searched at {:?})",
             env::current_dir().unwrap(),
-            search_path,
+            start_path,
         )
     }
 
     let test_module_name = function_name;
 
+    // In total:
+    // - Pass through the original input (we're still gonna call that function).
+    //   - Do this _outside_ the module we're about to introduce.  (We don't want to fuck with its scopes or the namespace it's allowed to `use`.)
+    // - Add a new module to contain and namespace all our new tests.
+    //   - (We use the same name as the function; that doesn't collide.  Modules and funcs are in different namespaces.)
+    // - (Between the above points: This is why "super::" is used inside each test to call out.)
+    // - Emit all the new test token streams inside the module.
+    // - That's it!  Ta-da!
     quote! {
+      #input
+
       #[cfg(test)]
       mod #test_module_name {
+      use std::path::Path;
+
         #[test]
-        fn it_works() {
-            print!("hello!  we did it!\n")
+        fn this_is_test_per_file_generated() {
+            print!("hello!  this is a dummy test to show that test_per_file worked!\n")
         }
 
-      #(#tests)*
+        #(#tests)*
       }
     }
     .into()

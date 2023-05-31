@@ -14,5 +14,4 @@ serde = { version = "1.0.163", features = ["derive"] }
 serde_json = { version = "1.0.96", features = ["preserve_order"] }
 serde_with = "3.0.0"
 memchr = "*"
-glob = "*"
 rstest = "*"
