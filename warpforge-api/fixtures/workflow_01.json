@@ -1,0 +1,13 @@
+{
+	"scene": {
+		"fs": {
+			"/wow": "ware:asdf:qwer"
+		}
+	},
+	"actions": {
+		"main": {}
+	},
+	"export": {}
+}
+---
+success

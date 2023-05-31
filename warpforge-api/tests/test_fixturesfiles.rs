@@ -30,19 +30,6 @@ use std::io;
 use std::path::Path;
 use testfiles_derive::test_per_file;
 
-// Okay the amazing thing is, it works.
-// The mild bummer thing is, I think VSCode's integrations making a "Run Test" button are going for a specific name, and filter it back out.  I don't know how others like `rstest` get around this (or if they're just blessed at this point).
-#[test_per_file(glob = "fixtures/*.json")]
-fn test_fixture(file_path: &Path) {
-    print!("hello!  this is a test for {:?}\n", file_path)
-}
-
-// Roughly the same as `Result<(), String>`, if we're honest, but it's desirable to have domain-relevant names, and room to expand.
-enum Expectation {
-    Success(),
-    ShouldError { display: String },
-}
-
 // Fixture files for the API have a simple format:
 // the serial document starts right away, with no preamble;
 // at some point, there's a "---" on a line by itself;
@@ -52,61 +39,38 @@ enum Expectation {
 // (We're interested in writing tests that include making sure parse *errors* from that
 // document have good line and column offset info.  Making that easy to eyeball helps!)
 //
-// In this function, we don't have any opinion of what the main document is;
-// we're just going to return bytes for both that, and the second half.
-fn parse_API_fixture_file(fixture_path: &str) -> Result<(), String> {
-    let file_content = fs::read(fixture_path).map_err(|e| e.to_string())?;
-    let separator = b"\n---\n";
-    let separator_position = memmem::find(&file_content, separator).ok_or_else(|| {
-        "Separator not found (hint: '---' should be present, in one line, alone)".to_string()
-    })?;
-    let json_data = &file_content[..separator_position];
-    let expected_result =
-        String::from_utf8_lossy(&file_content[separator_position + separator.len()..])
-            .trim()
-            .to_string();
+// We made our own test_per_file macro to power this.
+// Okay the amazing thing is, it works.
+// The mild bummer thing is, I think VSCode's integrations making a "Run Test" button are going for a specific name, and filter it back out.  I don't know how others like `rstest` get around this (or if they're just blessed at this point).
+#[test_per_file(glob = "fixtures/workflow_*.json")]
+fn test_fixture(file_path: &Path) {
+    let content = fs::read(file_path).unwrap();
+    let hunks = split_by_delimiter(content.as_slice());
 
-    let parsed_data: serde_json::Value =
-        serde_json::from_slice(json_data).map_err(|e| e.to_string())?;
+    let result: Result<warpforge_api::Workflow, _> = serde_json::from_slice(&hunks[0]);
+    match result {
+        Ok(value) => {
+            assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), "success\n");
 
-    if expected_result == "success" {
-        Ok(())
-    } else {
-        Err(expected_result)
+            let reserialized = serde_json::to_string(&value).unwrap();
+            let foobar: serde_json::Value = serde_json::from_slice(&hunks[0]).unwrap();
+            let normalized = serde_json::to_string(&foobar).unwrap();
+            assert_eq!(reserialized, normalized);
+        }
+        Err(err) => {
+            assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), format!("{}", err));
+        }
     }
 }
 
-// WIP: replacing the above with a more general thing, that splits $N times and doesn't do json yet.
-// And I'm making it _very_ hard on myself by trying to go for zero-copy references to subslices.
-
-struct Hunks<'a> {
-    owner: Vec<u8>,
-    unsplit: &'a [u8],
-    split: Vec<&'a [u8]>,
-}
-
-// FIXME still trying to win an argument about ownership.  pushing the limits of my rust knowledge here.
+// Split the given slice by occurances of a magic delimiter ("\n---\n"),
+// and return subslices of that slice.
 //
 // The return type is `Vec<&[u8]>` because the outer vec is a list we newly allocate,
-// while the contents are references to slices of another slice of bytes (to avoid copying).
+// while the contents are references to slices within the original slice of bytes (to avoid copying).
 // (Any time you go from `&[T]` to `Vec<T>`, you've taken ownership of something you didn't previously own,
-// and that means an allocation had to occur somewhere (even if an implicit clone might have hidden it).)
-fn load_file_split_by_delimiter<'a>(filename: &Path) -> io::Result<Hunks<'a>> {
-    let f = fs::File::open(filename)?;
-    let mut reader = std::io::BufReader::new(f);
-    let mut bytes: Vec<u8> = Vec::new();
-    use std::io::Read;
-    reader.read_to_end(&mut bytes)?;
-
-    let raw: &'a [u8] = bytes.as_slice();
-    let hunks = Hunks {
-        owner: bytes,
-        unsplit: raw,
-        split: split_by_delimiter(raw),
-    };
-    return Ok(hunks);
-}
-
+// and that means an allocation had to occur somewhere (even if an implicit clone might have hidden it).
+// That means if you tried to make this function as `Vec<u8> -> Vec<Vec<u8>>`, you'd have a copy-monster!)
 fn split_by_delimiter<'a>(splitme: &'a [u8]) -> Vec<&'a [u8]> {
     let separator_bytes = b"\n---\n";
     let mut result = Vec::new();
