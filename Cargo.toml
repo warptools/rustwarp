@@ -4,5 +4,5 @@ members = [
   "warpforge-cli",
   "catverters",
   "catverters-derive",
+  "testfiles-derive",
 ]
-
