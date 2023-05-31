@@ -80,7 +80,7 @@ fn parse_API_fixture_file(fixture_path: &str) -> Result<(), String> {
 // And I'm making it _very_ hard on myself by trying to go for zero-copy references to subslices.
 
 struct Hunks<'a> {
-    unsplit: Vec<u8>,
+    unsplit: &'a [u8],
     split: Vec<&'a [u8]>,
 }
 
@@ -90,13 +90,13 @@ struct Hunks<'a> {
 // while the contents are references to slices of another slice of bytes (to avoid copying).
 // (Any time you go from `&[T]` to `Vec<T>`, you've taken ownership of something you didn't previously own,
 // and that means an allocation had to occur somewhere (even if an implicit clone might have hidden it).)
-fn load_file_split_by_delimiter(filename: &Path) -> io::Result<Hunks> {
+fn load_file_split_by_delimiter<'a>(filename: &Path) -> io::Result<Hunks<'a>> {
     let file_content = fs::read(filename)?;
-    let mut hunks = Hunks {
-        unsplit: file_content, // Hoped this would do a "move" that lets me grab slices and let them have a lifetime determined by the hunks value (and move with it) but apparently that's not how it works :(
-        split: Vec::new(),
+    let raw : &'a [u8] = file_content.as_slice();
+    let hunks = Hunks {
+        unsplit: raw,
+        split: split_by_delimiter(raw),
     };
-    hunks.split = split_by_delimiter(&(hunks.unsplit.as_slice()));
     return Ok(hunks);
 }
 
