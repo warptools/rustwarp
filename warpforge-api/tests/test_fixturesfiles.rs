@@ -80,6 +80,7 @@ fn parse_API_fixture_file(fixture_path: &str) -> Result<(), String> {
 // And I'm making it _very_ hard on myself by trying to go for zero-copy references to subslices.
 
 struct Hunks<'a> {
+    owner: Vec<u8>,
     unsplit: &'a [u8],
     split: Vec<&'a [u8]>,
 }
@@ -91,9 +92,15 @@ struct Hunks<'a> {
 // (Any time you go from `&[T]` to `Vec<T>`, you've taken ownership of something you didn't previously own,
 // and that means an allocation had to occur somewhere (even if an implicit clone might have hidden it).)
 fn load_file_split_by_delimiter<'a>(filename: &Path) -> io::Result<Hunks<'a>> {
-    let file_content = fs::read(filename)?;
-    let raw : &'a [u8] = file_content.as_slice();
+    let f = fs::File::open(filename)?;
+    let mut reader = std::io::BufReader::new(f);
+    let mut bytes: Vec<u8> = Vec::new();
+    use std::io::Read;
+    reader.read_to_end(&mut bytes)?;
+
+    let raw: &'a [u8] = bytes.as_slice();
     let hunks = Hunks {
+        owner: bytes,
         unsplit: raw,
         split: split_by_delimiter(raw),
     };
