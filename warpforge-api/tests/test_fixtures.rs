@@ -33,7 +33,7 @@ fn test_deserialize_fixture() {
     );
 
     for (_name, fixture) in fixtures {
-        let value: warpforge_api::Workflow = serde_json::from_str(fixture).unwrap();
+        let value: warpforge_api::compute::Workflow = serde_json::from_str(fixture).unwrap();
         let reserialized = serde_json::to_string(&value).unwrap();
         let foobar: serde_json::Value = serde_json::from_str(fixture).unwrap();
         let normalized = serde_json::to_string(&foobar).unwrap();

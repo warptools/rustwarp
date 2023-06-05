@@ -1,8 +1,8 @@
-use catverters_derive;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::skip_serializing_none;
-use serde_with::{SerializeDisplay, DeserializeFromStr};
+
+use crate as wfapi;
 
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -14,20 +14,7 @@ pub struct Workflow {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Scene {
-    fs: IndexMap<String, ContentRef>,
-}
-
-#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
-enum ContentRef {
-    #[discriminant = "ware"]
-    Ware(WareID),
-    // TODO CatalogRef, Ingest, etc, etc.
-}
-
-#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
-struct WareID {
-    packtype: String,
-    hash: String,
+    fs: IndexMap<String, wfapi::content::ContentRef>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

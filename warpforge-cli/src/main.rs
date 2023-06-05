@@ -8,7 +8,7 @@ fn main() {
 
     match &cli.command {
         Some(Subcommands::Eval(args)) => {
-            let expect_to_load_this_from_files: Option<warpforge_api::Workflow>;
+            let expect_to_load_this_from_files: Option<warpforge_api::compute::Workflow>;
         }
         Some(Subcommands::Boogie(args)) => {}
         None => {}

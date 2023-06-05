@@ -48,7 +48,7 @@ fn test_fixture(file_path: &Path) {
     let content = fs::read(file_path).unwrap();
     let hunks = split_by_delimiter(content.as_slice());
 
-    let result: Result<warpforge_api::Workflow, _> = serde_json::from_slice(&hunks[0]);
+    let result: Result<warpforge_api::compute::Workflow, _> = serde_json::from_slice(&hunks[0]);
     match result {
         Ok(value) => {
             assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), "success\n");
