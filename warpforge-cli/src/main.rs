@@ -1,6 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 use warpforge_api;
 
+mod cmds;
+
 fn main() {
     let cli = Cli::parse();
 

@@ -217,10 +217,11 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
                 //  The string of the descriminator is the match clause;
 		    //  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
 		    //  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
+            // The use of `as ::std::str::FromStr` is because we use these tokens in both `FromStr` and `TryFrom<&str>`... I don't know if this should be regarded as clean, but it's what this code does right now.
 		    // TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
                 quote! {
                   #variant_descrim => {
-				let inhabitant = <#variant_type>::from_str(rest)?;
+				let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)?;
 				Ok(#ident::#variant_name(inhabitant))
 			}
                 }
@@ -256,14 +257,20 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
         }
       }
 
-
-    impl std::str::FromStr for #ident {
+      impl std::str::FromStr for #ident {
         type Err = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
 
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-              #fromstr_body
-            }
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            #fromstr_body
         }
+    }
+
+    impl std::convert::TryFrom<&str> for #ident {
+        type Error = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
+        fn try_from(s: &str) -> Result<Self, Self::Error> {
+            #fromstr_body
+        }
+    }
     }
     .into()
 }

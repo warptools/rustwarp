@@ -26,7 +26,6 @@ Are we gonna just do this again ourselves?  Ugh.  Apparently, yes.
 
 use memchr::memmem;
 use std::fs;
-use std::io;
 use std::path::Path;
 use testfiles_derive::test_per_file;
 

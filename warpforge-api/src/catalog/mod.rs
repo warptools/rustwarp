@@ -7,6 +7,10 @@
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use catverters_derive;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use derive_more::{FromStr, Display};
+
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum CatalogModuleCapsule {
@@ -21,9 +25,25 @@ pub struct CatalogModule {
     metadata: IndexMap<String, String>, // Actually really is just strings :) // FUTURE: I yet don't know how to do "any" with serde in a codec-agnostic way, if we did want to.
 }
 
+#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
+pub struct CatalogRef {
+    module_name: ModuleName,
+    release_name: ReleaseName,
+    item_name: ItemName,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct ReleaseName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+#[derive(FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
+pub struct ModuleName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
+pub struct ReleaseName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
+pub struct ItemName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+
 
 /*
 About validation:
