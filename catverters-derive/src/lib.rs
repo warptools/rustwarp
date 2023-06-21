@@ -150,8 +150,8 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 			});
 			// Gather up all the match arms into the actual match; and that's it: that's the whole body of fmt for enums.
 			quote! {
-			  match self {
-				#(#arms),*
+				match self {
+					#(#arms),*
 				}
 			}
 		}
@@ -195,37 +195,37 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 		},
 		syn::Data::Enum(typ) => {
 			let arms = typ.variants.iter().map(|variant: &syn::Variant| {
-                let variant_name = &variant.ident;
-                let variant_descrim = get_variant_discriminant(variant);
-		    let variant_type = match &variant.fields {
-			syn::Fields::Named(fields) => {
-				if fields.named.len() != 1 {
-					panic!("unsupported!  Stringoid enums must have one type in each of their members.")
-				};
-				fields.named.first()
-			},
-			syn::Fields::Unnamed(fields) =>  {
-				if fields.unnamed.len() != 1 {
-					panic!("unsupported!  Stringoid enums must have one type in each of their members.")
-				};
-				fields.unnamed.first()
-			},
-			syn::Fields::Unit => panic!("unsupported!  Stringoid enums must have one type in each of their members."),
-		  };
+			let variant_name = &variant.ident;
+			let variant_descrim = get_variant_discriminant(variant);
+			let variant_type = match &variant.fields {
+				syn::Fields::Named(fields) => {
+					if fields.named.len() != 1 {
+						panic!("unsupported!  Stringoid enums must have one type in each of their members.")
+					};
+					fields.named.first()
+				},
+				syn::Fields::Unnamed(fields) =>  {
+					if fields.unnamed.len() != 1 {
+						panic!("unsupported!  Stringoid enums must have one type in each of their members.")
+					};
+					fields.unnamed.first()
+				},
+				syn::Fields::Unit => panic!("unsupported!  Stringoid enums must have one type in each of their members."),
+			};
 
-                // Write the match arm.
-                //  The string of the descriminator is the match clause;
-		    //  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
-		    //  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
-            // The use of `as ::std::str::FromStr` is because we use these tokens in both `FromStr` and `TryFrom<&str>`... I don't know if this should be regarded as clean, but it's what this code does right now.
-		    // TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
-                quote! {
-                  #variant_descrim => {
-				let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)?;
-				Ok(#ident::#variant_name(inhabitant))
+			// Write the match arm.
+			//  The string of the descriminator is the match clause;
+			//  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
+			//  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
+			// The use of `as ::std::str::FromStr` is because we use these tokens in both `FromStr` and `TryFrom<&str>`... I don't know if this should be regarded as clean, but it's what this code does right now.
+			// TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
+			quote! {
+				#variant_descrim => {
+					let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)?;
+					Ok(#ident::#variant_name(inhabitant))
+				}
 			}
-                }
-            });
+		});
 
 			// The first thing the parse needs to do is split on the separator.
 			// Then it's a matching job: gather up the arms we prepared above.
@@ -242,35 +242,35 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 	};
 
 	quote! {
-	impl #ident {
-		fn describe(&self) -> String {
-			let mut string = String::from(stringify!(#ident));
-			string.push_str(" is ");
-			string.push_str(#description_str);
-			string
+		impl #ident {
+			fn describe(&self) -> String {
+				let mut string = String::from(stringify!(#ident));
+				string.push_str(" is ");
+				string.push_str(#description_str);
+				string
+			}
 		}
-	}
 
-	impl std::fmt::Display for #ident {
-		fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-			#fmt_body
+		impl std::fmt::Display for #ident {
+			fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+				#fmt_body
+			}
 		}
-	  }
 
-	  impl std::str::FromStr for #ident {
-		type Err = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
+		impl std::str::FromStr for #ident {
+			type Err = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
 
-		fn from_str(s: &str) -> Result<Self, Self::Err> {
-			#fromstr_body
+			fn from_str(s: &str) -> Result<Self, Self::Err> {
+				#fromstr_body
+			}
 		}
-	}
 
-	impl std::convert::TryFrom<&str> for #ident {
-		type Error = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
-		fn try_from(s: &str) -> Result<Self, Self::Error> {
-			#fromstr_body
+		impl std::convert::TryFrom<&str> for #ident {
+			type Error = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
+			fn try_from(s: &str) -> Result<Self, Self::Error> {
+				#fromstr_body
+			}
 		}
-	}
 	}
 	.into()
 }
