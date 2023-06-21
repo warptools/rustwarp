@@ -2,20 +2,20 @@
 Notes on ways to handle fixture testing:
 
 - rust out-of-box does not support dynamic test names.
-    - And they have the typical (pretty valid) reasoning of wanting to be able to enumerate test names statically.
-        - There's a discussion on https://internals.rust-lang.org/t/dynamic-tests-revisited/18095 but so far it lands somewhere pretty conservative.
-    - But of course, this is rust, so we also have macros.  Which means Anything Is Possible.
+	- And they have the typical (pretty valid) reasoning of wanting to be able to enumerate test names statically.
+		- There's a discussion on https://internals.rust-lang.org/t/dynamic-tests-revisited/18095 but so far it lands somewhere pretty conservative.
+	- But of course, this is rust, so we also have macros.  Which means Anything Is Possible.
 
 Okay so who can help?
 
 - rstest looks glorious in a lot of ways, but...
-    - I haven't found an incantation that lets it generate a whole bunch of cases at once, yet.
+	- I haven't found an incantation that lets it generate a whole bunch of cases at once, yet.
 - https://docs.rs/datatest/latest/datatest/ is neat and looks close to the mark...
-    - and it even explicitly has a bunch of filesystem features built right in!  Nice!
-    - except it requires a test runner, which is an odd requirement?  I think this should be possible with just proc macros.
-        - Depending on `#![feature(custom_test_frameworks)]` seems like its entering deep water.
-            - I'm really trying hard not to have to opt in to nightly compilers.
-    - I have not yet analyzed if this has a fixture regen features.
+	- and it even explicitly has a bunch of filesystem features built right in!  Nice!
+	- except it requires a test runner, which is an odd requirement?  I think this should be possible with just proc macros.
+		- Depending on `#![feature(custom_test_frameworks)]` seems like its entering deep water.
+			- I'm really trying hard not to have to opt in to nightly compilers.
+	- I have not yet analyzed if this has a fixture regen features.
 - ...That's all I could find.
 
 Are we gonna just do this again ourselves?  Ugh.  Apparently, yes.
@@ -44,23 +44,26 @@ use testfiles_derive::test_per_file;
 // Ah, yes, and of course the murderously bad thing is... cargo test caching is too smart.
 #[test_per_file(glob = "fixtures/workflow_*.json")]
 fn test_fixture(file_path: &Path) {
-    let content = fs::read(file_path).unwrap();
-    let hunks = split_by_delimiter(content.as_slice());
+	let content = fs::read(file_path).unwrap();
+	let hunks = split_by_delimiter(content.as_slice());
 
-    let result: Result<warpforge_api::compute::Workflow, _> = serde_json::from_slice(&hunks[0]);
-    match result {
-        Ok(value) => {
-            assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), "success\n");
+	let result: Result<warpforge_api::compute::Workflow, _> = serde_json::from_slice(&hunks[0]);
+	match result {
+		Ok(value) => {
+			assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), "success\n");
 
-            let reserialized = serde_json::to_string(&value).unwrap();
-            let foobar: serde_json::Value = serde_json::from_slice(&hunks[0]).unwrap();
-            let normalized = serde_json::to_string(&foobar).unwrap();
-            assert_eq!(reserialized, normalized);
-        }
-        Err(err) => {
-            assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), format!("{}\n", err));
-        }
-    }
+			let reserialized = serde_json::to_string(&value).unwrap();
+			let foobar: serde_json::Value = serde_json::from_slice(&hunks[0]).unwrap();
+			let normalized = serde_json::to_string(&foobar).unwrap();
+			assert_eq!(reserialized, normalized);
+		}
+		Err(err) => {
+			assert_eq!(
+				std::str::from_utf8(&hunks[1]).unwrap(),
+				format!("{}\n", err)
+			);
+		}
+	}
 }
 
 // Split the given slice by occurances of a magic delimiter ("\n---\n"),
@@ -72,20 +75,20 @@ fn test_fixture(file_path: &Path) {
 // and that means an allocation had to occur somewhere (even if an implicit clone might have hidden it).
 // That means if you tried to make this function as `Vec<u8> -> Vec<Vec<u8>>`, you'd have a copy-monster!)
 fn split_by_delimiter<'a>(splitme: &'a [u8]) -> Vec<&'a [u8]> {
-    let separator_bytes = b"\n---\n";
-    let mut result = Vec::new();
-    let mut current_chunk_start = 0;
+	let separator_bytes = b"\n---\n";
+	let mut result = Vec::new();
+	let mut current_chunk_start = 0;
 
-    while let Some(separator_start) = memmem::find(&splitme[current_chunk_start..], separator_bytes)
-    {
-        result.push(&splitme[current_chunk_start..separator_start]);
-        current_chunk_start = separator_start + separator_bytes.len();
-    }
+	while let Some(separator_start) = memmem::find(&splitme[current_chunk_start..], separator_bytes)
+	{
+		result.push(&splitme[current_chunk_start..separator_start]);
+		current_chunk_start = separator_start + separator_bytes.len();
+	}
 
-    // Push the last chunk if the file doesn't end with the separator marker
-    if current_chunk_start < splitme.len() {
-        result.push(&splitme[current_chunk_start..]);
-    }
+	// Push the last chunk if the file doesn't end with the separator marker
+	if current_chunk_start < splitme.len() {
+		result.push(&splitme[current_chunk_start..]);
+	}
 
-    return result;
+	return result;
 }
