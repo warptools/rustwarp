@@ -166,7 +166,10 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 					let field_name = &field.ident;
 					let field_type = &field.ty;
 					quote! {
-						let #field_name: #field_type = parts.next().ok_or("unreachable length mismatch")?.parse()?;
+						let #field_name: #field_type = parts.next().ok_or(::catverters::Error::InsufficientHunks{
+							type_name: stringify!(#ident).to_string(), value: s.to_string(), expected_separator: ":".to_string(),
+							next_field_name: stringify!(#field_name).to_string(),
+						})?.parse()?;
 					}
 				});
 
@@ -187,55 +190,60 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 				}
 			}
 			syn::Fields::Unnamed(_) => {
+				// FUTURE: there's no reason this shouldn't be the same as for named fields...?
 				quote! {
-					Err(<Self as std::str::FromStr>::Err::from("not yet implemented"))
+					panic!("catverters::Stringoid not yet implemented for structs with unnamed fields")
 				}
 			}
 			syn::Fields::Unit => panic!("unsupported!"),
 		},
 		syn::Data::Enum(typ) => {
 			let arms = typ.variants.iter().map(|variant: &syn::Variant| {
-			let variant_name = &variant.ident;
-			let variant_descrim = get_variant_discriminant(variant);
-			let variant_type = match &variant.fields {
-				syn::Fields::Named(fields) => {
-					if fields.named.len() != 1 {
-						panic!("unsupported!  Stringoid enums must have one type in each of their members.")
-					};
-					fields.named.first()
-				},
-				syn::Fields::Unnamed(fields) =>  {
-					if fields.unnamed.len() != 1 {
-						panic!("unsupported!  Stringoid enums must have one type in each of their members.")
-					};
-					fields.unnamed.first()
-				},
-				syn::Fields::Unit => panic!("unsupported!  Stringoid enums must have one type in each of their members."),
-			};
+				let variant_name = &variant.ident;
+				let variant_descrim = get_variant_discriminant(variant);
+				let variant_type = match &variant.fields {
+					syn::Fields::Named(fields) => {
+						if fields.named.len() != 1 {
+							panic!("unsupported!  Stringoid enums must have one type in each of their members.")
+						};
+						fields.named.first()
+					},
+					syn::Fields::Unnamed(fields) =>  {
+						if fields.unnamed.len() != 1 {
+							panic!("unsupported!  Stringoid enums must have one type in each of their members.")
+						};
+						fields.unnamed.first()
+					},
+					syn::Fields::Unit => panic!("unsupported!  Stringoid enums must have one type in each of their members."),
+				};
 
-			// Write the match arm.
-			//  The string of the descriminator is the match clause;
-			//  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
-			//  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
-			// The use of `as ::std::str::FromStr` is because we use these tokens in both `FromStr` and `TryFrom<&str>`... I don't know if this should be regarded as clean, but it's what this code does right now.
-			// TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
-			quote! {
-				#variant_descrim => {
-					let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)?;
-					Ok(#ident::#variant_name(inhabitant))
+				// Write the match arm.
+				//  The string of the descriminator is the match clause;
+				//  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
+				//  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
+				// The use of `as ::std::str::FromStr` is because we use these tokens in both `FromStr` and `TryFrom<&str>`... I don't know if this should be regarded as clean, but it's what this code does right now.
+				// TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
+				quote! {
+					#variant_descrim => {
+						let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)?;
+						Ok(#ident::#variant_name(inhabitant))
+					}
 				}
-			}
-		});
+			});
 
 			// The first thing the parse needs to do is split on the separator.
 			// Then it's a matching job: gather up the arms we prepared above.
 			// FUTURE: consider if the error type `serde::de::Error::unknown_variant` might be appropriate.  (This isn't serde, though... so perhaps not.)
 			quote! {
-			 let (prefix, rest) = s.split_once(':').ok_or("wrong number of separators")?;
-			  match prefix {
-				#(#arms),*,
-				_ => Err(Box::new(catverters::Error::UnknownDiscriminant{type_name: stringify!(#ident).to_string(), value: prefix.to_string()})),
-			  }
+				let (prefix, rest) = s.split_once(':').ok_or(::catverters::Error::MissingSeparator{
+					type_name: stringify!(#ident).to_string(), value: s.to_string(), expected_separator: ":".to_string(),
+				})?;
+				match prefix {
+					#(#arms),*,
+					_ => Err(::catverters::Error::UnknownDiscriminant{
+						type_name: stringify!(#ident).to_string(), value: prefix.to_string(),
+					}),
+				}
 			}
 		}
 		syn::Data::Union(_) => panic!("unsupported!"),
@@ -258,7 +266,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 		}
 
 		impl std::str::FromStr for #ident {
-			type Err = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
+			type Err = catverters::Error;
 
 			fn from_str(s: &str) -> Result<Self, Self::Err> {
 				#fromstr_body
@@ -266,7 +274,8 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 		}
 
 		impl std::convert::TryFrom<&str> for #ident {
-			type Error = Box<dyn std::error::Error>; // TODO: why can't this be more specific, like `type Err = Box<catverters::Error>;`?  And why is Box seemingly necessary?
+			type Error = catverters::Error;
+
 			fn try_from(s: &str) -> Result<Self, Self::Error> {
 				#fromstr_body
 			}

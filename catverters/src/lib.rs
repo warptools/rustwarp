@@ -7,4 +7,19 @@ pub enum Error {
 		value: String,
 		//   accepted: Vec<String>,
 	},
+
+	#[error("failed to parse {type_name} value: \"{value}\" is missing a separator (should contain \"{expected_separator}\")")]
+	MissingSeparator {
+		type_name: String,
+		value: String,
+		expected_separator: String,
+	},
+
+	#[error("failed to parse {type_name} value: \"{value}\" should have more separators (the next one would delimit the start of the {next_field_name} field; the separator is \"{expected_separator}\").)")]
+	InsufficientHunks {
+		type_name: String,
+		value: String,
+		expected_separator: String,
+		next_field_name: String,
+	},
 }
