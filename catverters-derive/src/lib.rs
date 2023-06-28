@@ -169,7 +169,9 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 						let #field_name: #field_type = parts.next().ok_or(::catverters::Error::InsufficientHunks{
 							type_name: stringify!(#ident).to_string(), value: s.to_string(), expected_separator: ":".to_string(),
 							next_field_name: stringify!(#field_name).to_string(),
-						})?.parse()?;
+						})?.parse().map_err(|err| { ::catverters::Error::FieldParseFailure{
+							type_name: stringify!(#ident).to_string(), problem_field_name: stringify!(#field_name).to_string(), cause: Box::new(err),
+						}})?;
 					}
 				});
 
@@ -222,10 +224,12 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 				//  then we call the from_str on the inhabitant type (of which there must only be one, for clarity's sake -- no tuples);
 				//  and then assuming that flies, we wrap it in the enum type and that in a successful Result.
 				// The use of `as ::std::str::FromStr` is because we use these tokens in both `FromStr` and `TryFrom<&str>`... I don't know if this should be regarded as clean, but it's what this code does right now.
-				// TODO: the error from the inhabitant's from_str call should probably get wrapped with further explanation.  It doesn't currently explain how we got to trying to parse that type.
 				quote! {
 					#variant_descrim => {
-						let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)?;
+						let inhabitant = <#variant_type as ::std::str::FromStr>::from_str(rest)
+							.map_err(|err| { ::catverters::Error::FieldParseFailure{
+								type_name: stringify!(#ident).to_string(), problem_field_name: stringify!(#variant_name).to_string(), cause: Box::new(err),
+							}})?;
 						Ok(#ident::#variant_name(inhabitant))
 					}
 				}
