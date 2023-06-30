@@ -1,5 +1,11 @@
+#[derive(clap::Args, Debug)]
+pub struct Cmd {
+	#[command(subcommand)]
+	command: Option<Subcommands>,
+}
+
 #[derive(clap::Subcommand, Debug)]
-pub enum Cmd {
+pub enum Subcommands {
 	/// read-item is a plumbing command.  It looks up a value by "{moduleName}:{releaseName}:{itemName}" tuple and returns the result as a plain string.
 	/// It is designed to be used easily within shell scripts.
 	///
