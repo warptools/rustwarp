@@ -27,6 +27,6 @@ pub enum Error {
 	FieldParseFailure {
 		type_name: String,
 		problem_field_name: String,
-		cause: Box<dyn ::std::error::Error>,
+		cause: Box<dyn ::std::error::Error + Send + Sync>,
 	},
 }
