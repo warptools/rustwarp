@@ -1,7 +1,7 @@
 #[derive(clap::Args, Debug)]
 pub struct Cmd {
 	#[command(subcommand)]
-	command: Option<Subcommands>,
+	command: Subcommands,
 }
 
 #[derive(clap::Subcommand, Debug)]

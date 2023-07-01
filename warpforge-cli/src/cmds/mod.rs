@@ -1,13 +1,13 @@
 pub mod catalog;
 
 #[derive(clap::Parser, Debug)]
-struct Root {
+pub struct Root {
 	#[command(subcommand)]
-	command: Option<Subcommands>,
+	pub command: Option<Subcommands>,
 
 	/// Raise verbosity by specifying this flag repeatedly.
 	#[arg(short, action = clap::ArgAction::Count)]
-	verbosity: u8,
+	pub verbosity: u8,
 }
 
 #[derive(clap::Subcommand, Debug)]
