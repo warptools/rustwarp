@@ -1,7 +1,7 @@
 #[derive(clap::Args, Debug)]
 pub struct Cmd {
 	#[command(subcommand)]
-	command: Subcommands,
+	pub subcommand: Subcommands,
 }
 
 #[derive(clap::Subcommand, Debug)]
@@ -18,5 +18,5 @@ use std::str::FromStr;
 #[derive(clap::Args, Debug)]
 pub struct ReadItemCmdArgs {
 	#[arg(value_parser = warpforge_api::catalog::CatalogRef::from_str)]
-	catalog_ref: warpforge_api::catalog::CatalogRef,
+	pub catalog_ref: warpforge_api::catalog::CatalogRef,
 }

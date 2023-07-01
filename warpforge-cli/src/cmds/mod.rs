@@ -3,7 +3,7 @@ pub mod catalog;
 #[derive(clap::Parser, Debug)]
 pub struct Root {
 	#[command(subcommand)]
-	pub command: Option<Subcommands>,
+	pub subcommand: Option<Subcommands>,
 
 	/// Raise verbosity by specifying this flag repeatedly.
 	#[arg(short, action = clap::ArgAction::Count)]

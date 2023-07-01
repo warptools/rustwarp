@@ -1,5 +1,4 @@
-use clap::{Args, Parser, Subcommand};
-use warpforge_api;
+use clap::Parser;
 
 mod cmds;
 
@@ -10,9 +9,18 @@ fn main() {
 		println!("args: {:?}", cli);
 	}
 
-	match &cli.command {
-		Some(cmds::Subcommands::Catalog(args)) => {
-			let expect_to_load_this_from_files: Option<warpforge_api::compute::Workflow>;
+	// Dispatch.
+	//
+	// Okay, I have some nonjoy at this.  I want:
+	//   - 1: to receive the command object with all parents.
+	//   - 2: to have a func on my command strugs that receives a call, rather than have to make this dispatch table.
+	match &cli.subcommand {
+		Some(cmds::Subcommands::Catalog(cmd)) => {
+			match &cmd.subcommand {
+				cmds::catalog::Subcommands::ReadItem(cmd) => {
+					println!("args: {:?}", cmd.catalog_ref);
+				}
+			}
 		}
 		None => {
 			println!("command used with no args.  some explanation text should go here :)");
