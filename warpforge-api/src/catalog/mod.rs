@@ -19,16 +19,16 @@ pub enum CatalogModuleCapsule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CatalogModule {
-	name: String, // TODO figure out how to wrap this better.  "newtype" pattern?
-	releases: IndexMap<ReleaseName, String>, // TODO some type for CIDs?  Or should we just leave these as opaque strings at this level?  ... let's have a CID.  Strict seems right in this spot.
-	metadata: IndexMap<String, String>, // Actually really is just strings :) // FUTURE: I yet don't know how to do "any" with serde in a codec-agnostic way, if we did want to.
+	pub name: String, // TODO figure out how to wrap this better.  "newtype" pattern?
+	pub releases: IndexMap<ReleaseName, String>, // TODO some type for CIDs?  Or should we just leave these as opaque strings at this level?  ... let's have a CID.  Strict seems right in this spot.
+	pub metadata: IndexMap<String, String>, // Actually really is just strings :) // FUTURE: I yet don't know how to do "any" with serde in a codec-agnostic way, if we did want to.
 }
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub struct CatalogRef {
-	module_name: ModuleName,
-	release_name: ReleaseName,
-	item_name: ItemName,
+	pub module_name: ModuleName,
+	pub release_name: ReleaseName,
+	pub item_name: ItemName,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
@@ -39,6 +39,9 @@ pub struct ReleaseName(String); // Does not currently accomplish anything other 
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
 pub struct ItemName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+
+// FUTURE: I think the above might want to all implement `impl Deref for ItemName {type Target = String; fn deref(&self) -> &Self::Target { &self.0 } }` or something of that form.
+//   And surely there's a stdlib derive macro for doing that.
 
 /*
 About validation:
@@ -92,3 +95,6 @@ mod tests {
 		}
 	}
 }
+
+
+

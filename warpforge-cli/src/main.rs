@@ -1,5 +1,6 @@
 use clap::Parser;
 
+mod dab;
 mod cmds;
 
 fn main() {
