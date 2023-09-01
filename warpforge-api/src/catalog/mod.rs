@@ -32,7 +32,7 @@ pub struct CatalogRef {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
-pub struct ModuleName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+pub struct ModuleName(pub String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
 pub struct ReleaseName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.

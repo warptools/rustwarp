@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use warpforge_api::catalog::CatalogModule;
 
 trait Handle {
-	fn load_module(&self, module_name: &str) -> Result<CatalogModule, Box<dyn std::error::Error>>;
+	fn load_module(&self, module_name: &warpforge_api::catalog::ModuleName) -> Result<CatalogModule, Box<dyn std::error::Error>>;
 }
 
 struct FsHandle {
@@ -19,8 +19,8 @@ impl FsHandle {
 }
 
 impl Handle for FsHandle {
-	fn load_module(&self, module_name: &str) -> Result<CatalogModule, Box<dyn std::error::Error>> {
-		let catmod_index_file_path: PathBuf = self.root_path.join(module_name).join("_module.json");
+	fn load_module(&self, module_name: &warpforge_api::catalog::ModuleName) -> Result<CatalogModule, Box<dyn std::error::Error>> {
+		let catmod_index_file_path: PathBuf = self.root_path.join(&module_name.0).join("_module.json");
 		let reader = BufReader::new(File::open(catmod_index_file_path)?);
 		let result = serde_json::from_reader(reader)?;
 		// TODO validate the name doesn't conflict with the path we took to get here.
@@ -37,5 +37,5 @@ fn main() {
 		false => Box::new(FsHandle::new("qwer")),
 	};
 
-	instance.load_module("hayo");
+	instance.load_module(&warpforge_api::catalog::ModuleName("hayo".to_string()));
 }
