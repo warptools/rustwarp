@@ -21,7 +21,8 @@ fn test_deserialize_fixture() {
             {
                 "scene": {
                     "fs": {
-                        "/wow": "ware:asdf:qwer"
+                        "/wow": "ware:asdf:qwer",
+                        "/zaowee": "catalog:foobar.org/zot:v500:a-b-c"
                     }
                 },
                 "actions": {

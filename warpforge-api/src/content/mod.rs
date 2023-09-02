@@ -5,7 +5,9 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 pub enum ContentRef {
 	#[discriminant = "ware"]
 	Ware(WareID),
-	// TODO CatalogRef, Ingest, etc, etc.
+	#[discriminant = "catalog"]
+	CatalogRef(crate::catalog::CatalogRef),
+	// TODO Ingest, Mount, etc, etc.
 }
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
