@@ -7,12 +7,12 @@ use warpforge_api::catalog::{ModuleName,ReleaseName};
 
 use std::error::Error as UndertypedError;
 
-trait Handle {
+pub trait Handle {
 	fn load_module(&self, module_name: &ModuleName) -> Result<CatalogModule, Box<dyn UndertypedError>>;
 	fn load_release(&self, module_name: &ModuleName, release_name: &ReleaseName) -> Result<CatalogRelease, Box<dyn UndertypedError>>;
 }
 
-struct FsHandle {
+pub struct FsHandle {
 	root_path: PathBuf,
 }
 

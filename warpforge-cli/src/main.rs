@@ -20,6 +20,9 @@ fn main() {
 			match &cmd.subcommand {
 				cmds::catalog::Subcommands::ReadItem(cmd) => {
 					println!("args: {:?}", cmd.catalog_ref);
+					// Create the catalog data access broker.  Store in a box just so we can have dynamic dispatch.  (This is architecture astronauting, but I wanna know that I know how to do this.)
+					// TODO: no, $HOME here is not valid; find a rust crate or sjust read the var or something for that.
+					let catalog_handle : Box<dyn dab::catalog::Handle> = Box::new(dab::catalog::FsHandle::new("$HOME/.warphome/catalogs/warpsys"));
 				}
 			}
 		}
