@@ -26,6 +26,7 @@ pub struct CatalogModule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CatalogRelease {
+	#[serde(rename = "releaseName")]
 	pub release_name: ReleaseName,
 	pub items: IndexMap<ItemName, crate::content::WareID>,
 	pub metadata: IndexMap<String, String>,
