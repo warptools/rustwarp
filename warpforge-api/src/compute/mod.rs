@@ -7,22 +7,22 @@ use crate as wfapi;
 #[skip_serializing_none]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Workflow {
-	scene: Option<Scene>,
-	actions: IndexMap<String, Action>,
-	export: IndexMap<String, Export>,
+	pub scene: Option<Scene>,
+	pub actions: IndexMap<String, Action>,
+	pub export: IndexMap<String, Export>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct Scene {
-	fs: IndexMap<String, wfapi::content::ContentRef>,
+pub struct Scene {
+	pub fs: IndexMap<String, wfapi::content::ContentRef>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct Action {
+pub struct Action {
 	// TODO
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct Export {
+pub struct Export {
 	// TODO
 }
