@@ -60,15 +60,3 @@ impl Handle for FsHandle {
 		Ok(result)
 	}
 }
-
-fn main() {
-	let b = true;
-	// This `match` clause is just to demo syntax for how dynamic construction of various Handle implementations can work.
-	let instance: Box<dyn Handle> = match b {
-		// Both of the below arg styles work seamlessly because of the `P: AsRef<Path>` hijinx.
-		true => Box::new(FsHandle::new(Path::new("asdf"))),
-		false => Box::new(FsHandle::new("qwer")),
-	};
-
-	instance.load_module(&ModuleName("hayo".to_string()));
-}
