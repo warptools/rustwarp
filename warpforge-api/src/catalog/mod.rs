@@ -24,6 +24,13 @@ pub struct CatalogModule {
 	pub metadata: IndexMap<String, String>, // Actually really is just strings :) // FUTURE: I yet don't know how to do "any" with serde in a codec-agnostic way, if we did want to.
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct CatalogRelease {
+	pub release_name: ReleaseName,
+	pub items: IndexMap<ItemName, crate::content::WareID>,
+	pub metadata: IndexMap<String, String>,
+}
+
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub struct CatalogRef {
 	pub module_name: ModuleName,
@@ -35,7 +42,7 @@ pub struct CatalogRef {
 pub struct ModuleName(pub String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
-pub struct ReleaseName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
+pub struct ReleaseName(pub String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)] // Unwrap the newtype.  We'll remove "From" if implementing stricter validation.
 pub struct ItemName(String); // Does not currently accomplish anything other than naming and documentation.  FUTURE: some validation rules would be nice -- see comments below about how, though.
@@ -95,6 +102,3 @@ mod tests {
 		}
 	}
 }
-
-
-
