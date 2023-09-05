@@ -14,8 +14,8 @@ fn main() {
 }
 
 fn main2() -> Result<(), Error> {
-	let cli = cmds::Root::try_parse()
-		.map_err(|e| Error::InvalidArguments{cause:Box::new(e)})?;
+	let cli =
+		cmds::Root::try_parse().map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 
 	if cli.verbosity >= 2 {
 		println!("args: {:?}", cli);
