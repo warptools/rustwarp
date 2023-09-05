@@ -1,6 +1,15 @@
 hard_tabs = true
-max_width = 999999999 ## Kindly twitch less when things change line length.
 merge_derives = false
+
+# max_width = 999999999 ## Kindly twitch less when things change line length.
+## max_width is extremely cursed in practice.
+## I'd like to say "please don't rewrite the number of linebreaks in my macro parameters"...
+## but setting this to a high number seems to cause rustfmt to also try to take many of my enter struct definitions
+## and ram *THOSE* onto absurdly long one-liners.
+##
+## I just want visually stable rules like "if I put structs on multiple lines, they stay that way".
+## I'm very, very unimpressed by rustfmt's apparent inability to do that.
+
 # struct_lit_single_line doesn't have a 'preserve' option and i'm mad.
 # use_small_heuristics is interesting but vague
 
