@@ -1,5 +1,11 @@
 hard_tabs = true
-merge_derives = false
+
+# merge_derives = false
+## Doesn't do what it says it does.
+##
+## Docs claim that true forces adjacent `#[derive()]` blocks to be combined.
+##
+## Actually what it does is: setting to false causes linebreaks between every param in a single derive.
 
 # max_width = 999999999 ## Kindly twitch less when things change line length.
 ## max_width is extremely cursed in practice.
