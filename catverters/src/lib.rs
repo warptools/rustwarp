@@ -23,7 +23,9 @@ pub enum Error {
 		next_field_name: String,
 	},
 
-	#[error("failed to parse {type_name} value: field {problem_field_name} reported an error: {cause}")]
+	#[error(
+		"failed to parse {type_name} value: field {problem_field_name} reported an error: {cause}"
+	)]
 	FieldParseFailure {
 		type_name: String,
 		problem_field_name: String,
