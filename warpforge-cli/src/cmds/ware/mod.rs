@@ -22,4 +22,7 @@ use std::str::FromStr;
 pub struct UnpackCmdArgs {
 	#[arg(value_parser = warpforge_api::content::WareID::from_str)]
 	pub ware_id: warpforge_api::content::WareID,
+
+	#[arg(long = "fetch-url")]
+	pub fetch_url: Vec<String>,
 }

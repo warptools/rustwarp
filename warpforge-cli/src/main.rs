@@ -61,7 +61,29 @@ fn main2() -> Result<(), Error> {
 		}
 		Some(cmds::Subcommands::Ware(cmd)) => match &cmd.subcommand {
 			cmds::ware::Subcommands::Unpack(cmd) => {
-				panic!("unpack unimplemented...")
+				use std::io::{BufRead, BufReader};
+				use std::process::{Command, Stdio};
+				let sources = cmd.fetch_url.iter().map(|s| "--source=".to_string() + &s);
+				let mut riocmd = Command::new("rio");
+				riocmd
+					.args(["unpack", "--format=json", "--placer=direct"])
+					.args(sources)
+					.args([&cmd.ware_id.to_string(), "testriounpack/"]);
+				// TODO implement destination flag
+				// (and be careful cause rio will blow away anything in it's path!!!!!)
+				let args: &Vec<_> = &riocmd.get_args().collect();
+				println!("Running \"rio {:?}\"", args);
+				let mut child = riocmd
+					.stdout(Stdio::piped())
+					.stderr(Stdio::piped())
+					.spawn()
+					.unwrap();
+				let mut child_out = BufReader::new(child.stdout.as_mut().unwrap());
+				let mut line = String::new();
+
+				BufRead::read_line(&mut child_out, &mut line).unwrap();
+				println!("{line}");
+				Ok(())
 			}
 		},
 		None => {
