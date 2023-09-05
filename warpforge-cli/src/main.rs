@@ -2,9 +2,9 @@ use clap::Parser;
 use std::env;
 use std::path;
 
-mod errors;
 mod cmds;
 mod dab;
+mod errors;
 
 use errors::*;
 
@@ -50,17 +50,15 @@ fn main2() -> Result<(), Error> {
 									}
 									None => {
 										println!("catalog item not found.");
-										Err(Error::CatalogEntryNotExists{reference: cmd.catalog_ref.clone()})
+										Err(Error::CatalogEntryNotExists {
+											reference: cmd.catalog_ref.clone(),
+										})
 									}
 								},
-								Err(e) => {
-									Err(Error::CatalogAccessError{cause: e})
-								},
+								Err(e) => Err(Error::CatalogAccessError { cause: e }),
 							}
 						}
-						Err(e) => {
-							Err(Error::BizarreEnvironment{cause: Box::new(e)})
-						}
+						Err(e) => Err(Error::BizarreEnvironment { cause: Box::new(e) }),
 					}
 				}
 			}
