@@ -2,11 +2,20 @@ use clap::Parser;
 use std::env;
 use std::path;
 
+mod errors;
 mod cmds;
 mod dab;
 
+use errors::*;
+
 fn main() {
-	let cli = cmds::Root::parse();
+	main2().expect("wow")
+	// TODO: destructure the enum members into distinct exit codes.
+}
+
+fn main2() -> Result<(), Error> {
+	let cli = cmds::Root::try_parse()
+		.map_err(|e| Error::InvalidArguments{cause:Box::new(e)})?;
 
 	if cli.verbosity >= 2 {
 		println!("args: {:?}", cli);
@@ -35,31 +44,35 @@ fn main() {
 							);
 							match catalog_release {
 								Ok(cr) => match cr.items.get(&cmd.catalog_ref.item_name) {
-									Some(wareid) => println!("{wareid}"),
-									None => println!("catalog item not found."),
-									// TODO: return non-zero
+									Some(wareid) => {
+										println!("{wareid}");
+										Ok(())
+									}
+									None => {
+										println!("catalog item not found.");
+										Err(Error::CatalogEntryNotExists{reference: cmd.catalog_ref.clone()})
+									}
 								},
-
 								Err(e) => {
-									println!("Failed to load_release from catalog_handle ({e})")
-									// TODO: return non-zero
-								}
+									Err(Error::CatalogAccessError{cause: e})
+								},
 							}
 						}
-						Err(e) => println!("$HOME not set! ({e}) Failing."),
-						// TODO: return non-zero
+						Err(e) => {
+							Err(Error::BizarreEnvironment{cause: Box::new(e)})
+						}
 					}
 				}
 			}
 		}
 		Some(cmds::Subcommands::Ware(cmd)) => match &cmd.subcommand {
 			cmds::ware::Subcommands::Unpack(cmd) => {
-				println!("unpack unimplemented...")
+				panic!("unpack unimplemented...")
 			}
 		},
 		None => {
 			println!("command used with no args.  some explanation text should go here :)");
-			// TODO: return non-zero
+			Ok(())
 		}
 	}
 }
