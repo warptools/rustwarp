@@ -30,35 +30,31 @@ fn main2() -> Result<(), Error> {
 		Some(cmds::Subcommands::Catalog(cmd)) => {
 			match &cmd.subcommand {
 				cmds::catalog::Subcommands::ReadItem(cmd) => {
-					match env::var("HOME") {
-						Ok(val) => {
-							// Create the catalog data access broker.  Store in a box just so we can have dynamic dispatch.  (This is architecture astronauting, but I wanna know that I know how to do this.)
-							//TODO: check for a root workspace above $CWD before $HOME/.warphome
-							let catalog_handle: Box<dyn dab::catalog::Handle> =
-								Box::new(dab::catalog::FsHandle::new(
-									path::Path::new(&val).join(".warphome/catalogs/warpsys"),
-								));
-							let catalog_release = catalog_handle.load_release(
-								&cmd.catalog_ref.module_name,
-								&cmd.catalog_ref.release_name,
-							);
-							match catalog_release {
-								Ok(cr) => match cr.items.get(&cmd.catalog_ref.item_name) {
-									Some(wareid) => {
-										println!("{wareid}");
-										Ok(())
-									}
-									None => {
-										println!("catalog item not found.");
-										Err(Error::CatalogEntryNotExists {
-											reference: cmd.catalog_ref.clone(),
-										})
-									}
-								},
-								Err(e) => Err(Error::CatalogAccessError { cause: e }),
-							}
+					let user_home = env::var("HOME")
+						.map_err(|e| Error::BizarreEnvironment { cause: Box::new(e) })?;
+
+					// Create the catalog data access broker.  Store in a box just so we can have dynamic dispatch.  (This is architecture astronauting, but I wanna know that I know how to do this.)
+					//TODO: check for a root workspace above $CWD before $HOME/.warphome
+					let catalog_handle: Box<dyn dab::catalog::Handle> =
+						Box::new(dab::catalog::FsHandle::new(
+							path::Path::new(&user_home).join(".warphome/catalogs/warpsys"),
+						));
+
+					let catalog_release = catalog_handle
+						.load_release(&cmd.catalog_ref.module_name, &cmd.catalog_ref.release_name)
+						.map_err(|e| Error::CatalogAccessError { cause: e })?;
+
+					match catalog_release.items.get(&cmd.catalog_ref.item_name) {
+						Some(wareid) => {
+							println!("{wareid}");
+							Ok(())
 						}
-						Err(e) => Err(Error::BizarreEnvironment { cause: Box::new(e) }),
+						None => {
+							println!("catalog item not found.");
+							Err(Error::CatalogEntryNotExists {
+								reference: cmd.catalog_ref.clone(),
+							})
+						}
 					}
 				}
 			}
