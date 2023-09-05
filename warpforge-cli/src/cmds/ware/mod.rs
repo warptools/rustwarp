@@ -6,10 +6,13 @@ pub struct Cmd {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Subcommands {
-	/// unpack is a plumbing command.  It accepts a WareID and calls `rio` to unpack the tarball in the cwd or specified path.
+	/// unpack fills a directory with files by unpackaging a packed fileset (a "ware" -- may be a tarball, or refer to a git repo, etc)
+	/// which you specify by use of a wareID (e.g. looks like "tar:asdfweiufh" or "git:1234cdf").
 	/// It is designed to be used easily within shell scripts.
 	///
 	/// Optional flags to the command can specify the unpacking location or and whether to overwrite existing files.
+	///
+	/// Internally, this command may use `rio` or other plugin subcommands, but this detail is generally hidden from the user.
 	Unpack(UnpackCmdArgs),
 }
 

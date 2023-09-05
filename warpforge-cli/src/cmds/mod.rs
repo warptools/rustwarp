@@ -13,7 +13,9 @@ pub struct Root {
 
 #[derive(clap::Subcommand, Debug)]
 pub enum Subcommands {
-	/// Docs go here.
+	/// subcommands for working with catalogs, warpforge's data labelling system.
 	Catalog(catalog::Cmd),
+
+	/// subcommands for working with wares and filesystems -- snapshotting, packing, unpacking, mirroring, etc.
 	Ware(ware::Cmd),
 }
