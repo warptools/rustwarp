@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod ware;
 
 #[derive(clap::Parser, Debug)]
 pub struct Root {
@@ -14,4 +15,5 @@ pub struct Root {
 pub enum Subcommands {
 	/// Docs go here.
 	Catalog(catalog::Cmd),
+	Ware(ware::Cmd),
 }

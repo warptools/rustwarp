@@ -37,20 +37,29 @@ fn main() {
 								Ok(cr) => match cr.items.get(&cmd.catalog_ref.item_name) {
 									Some(wareid) => println!("{wareid}"),
 									None => println!("catalog item not found."),
+									// TODO: return non-zero
 								},
 
 								Err(e) => {
 									println!("Failed to load_release from catalog_handle ({e})")
+									// TODO: return non-zero
 								}
 							}
 						}
 						Err(e) => println!("$HOME not set! ({e}) Failing."),
+						// TODO: return non-zero
 					}
 				}
 			}
 		}
+		Some(cmds::Subcommands::Ware(cmd)) => match &cmd.subcommand {
+			cmds::ware::Subcommands::Unpack(cmd) => {
+				println!("unpack unimplemented...")
+			}
+		},
 		None => {
 			println!("command used with no args.  some explanation text should go here :)");
+			// TODO: return non-zero
 		}
 	}
 }
