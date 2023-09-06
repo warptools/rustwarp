@@ -43,6 +43,18 @@ pub enum Error {
 	CatalogAccessError { cause: ErrorCause },
 }
 
+impl Error {
+	pub fn code(&self) -> i32 {
+		match self {
+			Error::InvalidArguments { .. } => 1,
+			Error::BizarreEnvironment { .. } => 4,
+			Error::MissingPlugin { .. } => 7,
+			Error::CatalogEntryNotExists { .. } => 14,
+			Error::CatalogAccessError { .. } => 15,
+		}
+	}
+}
+
 // I'm tempted to write a macro that makes partial constructors for each of these,
 // which take a parameter for everything _but_ the cause field.
 // The result would be functions that are easy to use together with `Result::map_err`.

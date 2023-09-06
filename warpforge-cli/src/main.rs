@@ -13,7 +13,7 @@ fn main() {
 		Ok(_) => {}
 		Err(e) => {
 			println!("{}", e);
-			std::process::exit(10); // FIXME select codes per error variant
+			std::process::exit(e.code());
 		}
 	}
 }
