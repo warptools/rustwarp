@@ -67,11 +67,15 @@ fn main2() -> Result<(), Error> {
 				use std::io::{BufRead, BufReader};
 				use std::process::{Command, Stdio};
 				let sources = cmd.fetch_url.iter().map(|s| "--source=".to_string() + &s);
+				let dest = match &cmd.dest {
+					Some(s) => s,
+					None => "unpack_default", // TODO find and use package name string
+				};
 				let mut riocmd = Command::new("rio");
 				riocmd
 					.args(["unpack", "--format=json", "--placer=direct"])
 					.args(sources)
-					.args([&cmd.ware_id.to_string(), &cmd.dest]);
+					.args([&cmd.ware_id.to_string(), dest]);
 				// TODO implement destination flag
 				// (and be careful cause rio will blow away anything in it's path!!!!!)
 				let args: &Vec<_> = &riocmd.get_args().collect();
