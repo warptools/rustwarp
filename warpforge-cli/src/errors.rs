@@ -1,4 +1,4 @@
-type ErrorCause = Box<dyn ::std::error::Error>; // `+ Send + Sync` has sometimes seemed virtuous here?  But it also produces conflicts.  Still don't understand what's wise here.
+type ErrorCause = Box<dyn::std::error::Error>; // `+ Send + Sync` has sometimes seemed virtuous here?  But it also produces conflicts.  Still don't understand what's wise here.
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {

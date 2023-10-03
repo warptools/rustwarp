@@ -71,7 +71,7 @@ fn main2() -> Result<(), Error> {
 				riocmd
 					.args(["unpack", "--format=json", "--placer=direct"])
 					.args(sources)
-					.args([&cmd.ware_id.to_string(), "testriounpack/"]);
+					.args([&cmd.ware_id.to_string(), &cmd.dest]);
 				// TODO implement destination flag
 				// (and be careful cause rio will blow away anything in it's path!!!!!)
 				let args: &Vec<_> = &riocmd.get_args().collect();

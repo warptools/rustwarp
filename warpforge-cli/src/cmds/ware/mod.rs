@@ -25,4 +25,6 @@ pub struct UnpackCmdArgs {
 
 	#[arg(long = "fetch-url")]
 	pub fetch_url: Vec<String>,
+	#[arg(short, long = "dest", value_name = "DIR")]
+	pub dest: String,
 }
