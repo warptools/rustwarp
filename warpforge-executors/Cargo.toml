@@ -1,0 +1,10 @@
+[package]
+name = "warpforge-executors"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+warpforge-api = { path = "../warpforge-api" }
+
+thiserror = "*"
+tokio = { version = "*", features = ["macros", "rt", "rt-multi-thread", "io-util", "process"] }

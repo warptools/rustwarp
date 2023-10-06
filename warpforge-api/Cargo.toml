@@ -8,11 +8,11 @@ catverters = { path = "../catverters" }
 catverters-derive = { path = "../catverters-derive" }
 testfiles-derive = { path = "../testfiles-derive" }
 
-indexmap = { version = "1.9.3", features = ["serde"] }
-indoc = "2.0.1"
-serde = { version = "1.0.163", features = ["derive"] }
-serde_json = { version = "1.0.96", features = ["preserve_order"] }
-serde_with = "3.0.0"
+indexmap = { version = "*", features = ["serde"] }
+indoc = "*"
+serde = { version = "*", features = ["derive"] }
+serde_json = { version = "*", features = ["preserve_order"] }
+serde_with = "*"
 memchr = "*"
 rstest = "*"
 derive_more = "*"

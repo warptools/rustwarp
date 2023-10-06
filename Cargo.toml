@@ -1,7 +1,9 @@
 [workspace]
+resolver = "2"
 members = [
   "warpforge-api",
   "warpforge-cli",
+  "warpforge-executors",
   "catverters",
   "catverters-derive",
   "testfiles-derive",
