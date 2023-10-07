@@ -69,6 +69,7 @@ impl MountSpec {
 	}
 }
 
+// future work: make this into a `impl Add<AsRef<OsStr>> for OsString`?
 fn concat_to_osstring<T: AsRef<OsStr> + ?Sized, U: AsRef<OsStr> + ?Sized>(
 	a: &T,
 	b: &U,
