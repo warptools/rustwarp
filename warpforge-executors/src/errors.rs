@@ -7,4 +7,9 @@ pub enum Error {
 		msg: String, //
 		cause: ErrorCause,
 	},
+
+	#[error("{msg}")]
+	CatchallCauseless {
+		msg: String, //
+	},
 }
