@@ -1,6 +1,7 @@
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
+use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
@@ -23,7 +24,7 @@ struct GvisorExecutor {
 }
 
 impl GvisorExecutor {
-	pub async fn run(&self, task: &crate::ContainerParams) -> Result<(), Box<dyn std::error::Error>> {
+	pub async fn run(&self, task: &crate::ContainerParams) -> Result<(), crate::Error> {
 		let ident: &str = "containernamegoeshere"; // todo: generate this.
 		self.prep_bundledir(ident, task)?;
 		self.container_exec(ident, task).await?;
@@ -34,16 +35,40 @@ impl GvisorExecutor {
 		&self,
 		ident: &str,
 		task: &crate::ContainerParams,
-	) -> Result<(), Box<dyn std::error::Error>> {
+	) -> Result<(), crate::Error> {
 		// Build the config data.
 		let mut spec = crate::oci::oci_spec_base();
 		// todo: apply mutations here.
 
 		// Write it out.
 		let cfg_dir = self.ersatz_dir.join(ident);
-		fs::create_dir_all(&cfg_dir)?; // TODO: really need some error mapping in here.
-		let f = fs::File::create(cfg_dir.join("config.json"))?; // Must literally be this name within bundle dir.
-		serde_json::to_writer(f, &spec)?;
+		fs::create_dir_all(&cfg_dir).map_err(|e| crate::Error::Catchall {
+			msg: "failed during executor internals: couldn't create bundle dir".to_owned(),
+			cause: Box::new(e),
+		})?;
+		let f = fs::File::create(cfg_dir.join("config.json")) // Must literally be this name within bundle dir.
+			.map_err(|e| crate::Error::Catchall {
+				msg:
+					"failed during executor internals: couldn't open bundle config file for writing"
+						.to_owned(),
+				cause: Box::new(e),
+			})?;
+		serde_json::to_writer(f, &spec).map_err(|e| {
+			if e.is_io() {
+				let cause: &dyn Error = e.source().expect("must exist").to_owned();
+				// Above this seems to double-unwrap but I don't see another way to access the io error?
+				// But more importantly, it says "e doesnt live long enough" and `to_owned` isn't helping.
+				return crate::Error::Catchall {
+					msg: "failed during executor internals: io error writing config file"
+						.to_owned(),
+					cause: Box::new(cause),
+				};
+			}
+			return crate::Error::Catchall {
+				msg: "unable to serialize OCI spec file".to_owned(),
+				cause: Box::new(e),
+			};
+		});
 		Ok(())
 	}
 
@@ -51,7 +76,7 @@ impl GvisorExecutor {
 		&self,
 		ident: &str,
 		task: &crate::ContainerParams,
-	) -> Result<(), Box<dyn std::error::Error>> {
+	) -> Result<(), crate::Error> {
 		let mut cmd = Command::new("gvisor");
 		cmd.args(
 			["--debug-log=".to_owned() + self.log_dir.to_str().expect("unreachable non-utf8")],
@@ -94,7 +119,13 @@ impl GvisorExecutor {
 
 		let mut reader = tokio::io::BufReader::new(stdout).lines();
 
-		while let Some(line) = reader.next_line().await? {
+		while let Some(line) = reader
+			.next_line()
+			.await
+			.map_err(|e| crate::Error::Catchall {
+				msg: "system io error communicating with subprocess during executor run".to_owned(),
+				cause: Box::new(e),
+			})? {
 			println!("relayed: {}", line);
 		}
 
