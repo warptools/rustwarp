@@ -4,7 +4,7 @@ use std::path::Path;
 use indexmap::IndexMap;
 
 mod execdemo;
-// mod gvisor;
+mod gvisor;
 mod oci;
 
 /// This struct contains most of the parameters of a container execution that vary in Warpforge.

@@ -3,7 +3,6 @@ use tokio::process::Command;
 
 use std::process::Stdio;
 
-#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::new("cat");
 
@@ -41,8 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
+    #[tokio::main]
 	#[test]
-	fn it_works() {
-		super::main().unwrap();
+	async fn it_works() {
+		super::main().await.unwrap();
 	}
 }

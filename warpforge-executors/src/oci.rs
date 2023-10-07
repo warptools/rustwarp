@@ -1,6 +1,21 @@
 use serde_json::json;
 
-// In this file, we have the defaults and templates for OCI container config.
+pub trait ToOCIMount {
+	fn to_oci_mount(&self) -> serde_json::Value;
+}
+
+impl ToOCIMount for crate::MountSpec {
+	fn to_oci_mount(&self) -> serde_json::Value {
+		json!([		{
+			"destination": self.destination,
+			"type": self.kind,
+			"source": self.source,
+			"options": self.options,
+		}])
+	}
+}
+
+// Below, we have the defaults and templates for OCI container config.
 // That means "runc" and "gvisor" in practice.  (There may be others, but this is what we test and know.)
 //
 // These are we have essentially static values.
@@ -10,13 +25,14 @@ use serde_json::json;
 // We use json values because that's what they are when they get sent to the subprocesses.
 // We also (plan to -- future work) let users amend these values by a simple JSON Patch API.
 // So, overall, KISS means "just treat it like JSON all the way through".
+//
+// (Yes, there is a crate for OCI spec stuff: https://github.com/containers/oci-spec-rs --
+// but at the moment, I don't see how using it would provide significant value.
+// And I'm outright suspicious of some of it -- such as https://docs.rs/oci-spec/0.6.2/src/oci_spec/runtime/miscellaneous.rs.html#161 -- what's that "gid=5" special case doing there??)
 
-pub fn oci_spec_default_caps() -> serde_json::Value {
-	json!([
-		"CAP_AUDIT_WRITE",
-		"CAP_KILL",
-		"CAP_NET_BIND_SERVICE"
-	])
+
+fn oci_spec_default_caps() -> serde_json::Value {
+	json!(["CAP_AUDIT_WRITE", "CAP_KILL", "CAP_NET_BIND_SERVICE"])
 }
 
 // Values not included in this, but definitely needed, include:
