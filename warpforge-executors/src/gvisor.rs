@@ -2,7 +2,7 @@ use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
 use std::error::Error;
-use std::fs;
+use std::{fs, io};
 use std::path::PathBuf;
 use std::process::Stdio;
 
@@ -55,11 +55,12 @@ impl GvisorExecutor {
 			})?;
 		serde_json::to_writer(f, &spec).map_err(|e| {
 			if e.is_io() {
-				let cause: std::io::Error = e.into();
+				let e: io::Error = e.into();
+
 				return crate::Error::Catchall {
 					msg: "failed during executor internals: io error writing config file"
 						.to_owned(),
-					cause: Box::new(cause),
+					cause: Box::new(e),
 				};
 			}
 			return crate::Error::CatchallCauseless {
