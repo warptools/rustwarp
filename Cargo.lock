@@ -1031,6 +1031,8 @@ dependencies = [
 name = "warpforge-executors"
 version = "0.1.0"
 dependencies = [
+ "indexmap 1.9.3",
+ "serde_json",
  "thiserror",
  "tokio",
  "warpforge-api",
