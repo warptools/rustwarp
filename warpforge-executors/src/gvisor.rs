@@ -53,35 +53,20 @@ impl GvisorExecutor {
 						.to_owned(),
 				cause: Box::new(e),
 			})?;
-		serde_json::to_writer(f, &spec).map_err(move |e| {
+		serde_json::to_writer(f, &spec).map_err(|e| {
 			if e.is_io() {
-				// The serde_json::Error.source method seems to unwrap more than I'd want
-				//  (it immediately calls `.source()` on the io::Error, too, rather than just returning that),
-				//   but I don't see any other way to get the IO info alone back out of it, so let's roll with it for now.
-				let maybe_cause: Option<&(dyn std::error::Error + 'static)> = e.source();
-				let cause_ref: &(dyn Error + 'static) = maybe_cause.expect("must exist");
-				let cause_ref_owned = cause_ref.to_owned(); // unclear this does anything; still returns `&dyn Error`.
-				let e2: std::io::Error = cause_ref_owned.into();
-				let rewrapped: Box<&dyn Error> = Box::new(&e2);
-				// Mostly I'm unable to get this to compile with some kind of
-				//  "e doesnt live long enough" error.
-				// I'd love to take ownership of the inner error value, but can't find any incantation to do it.
-				//  (Remember, serde_json isn't giving us any access to the `std:io::Error` at all,
-				//   but it *is* offering a `&dyn std::error::Error` of some values even further inside the io::Error,
-				//    and we're... just trying to roll with that for now.)
-				// This current attempt to throw an `into` at it doesn't fly either -- nobody's providing a useful one.
-
+				let cause: std::io::Error = e.into();
 				return crate::Error::Catchall {
 					msg: "failed during executor internals: io error writing config file"
 						.to_owned(),
-					cause: rewrapped,
+					cause: Box::new(cause),
 				};
 			}
 			return crate::Error::CatchallCauseless {
 				msg: "unable to serialize OCI spec file".to_owned(),
 				//cause: Box::new(e),
 			};
-		});
+		})?;
 		Ok(())
 	}
 
