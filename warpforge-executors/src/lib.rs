@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 
 mod execdemo;
 // mod gvisor;
-// mod oci;
+mod oci;
 
 /// This struct contains most of the parameters of a container execution that vary in Warpforge.
 /// It's lower-level than a Formula (we never expose this API to users).
