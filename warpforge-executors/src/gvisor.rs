@@ -1,8 +1,7 @@
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
-use std::error::Error;
-use std::{fs, io};
+use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
 
@@ -55,17 +54,15 @@ impl GvisorExecutor {
 			})?;
 		serde_json::to_writer(f, &spec).map_err(|e| {
 			if e.is_io() {
-				let e: io::Error = e.into();
-
 				return crate::Error::Catchall {
 					msg: "failed during executor internals: io error writing config file"
 						.to_owned(),
-					cause: Box::new(e),
+					cause: Box::new(Into::<std::io::Error>::into(e)),
 				};
 			}
-			return crate::Error::CatchallCauseless {
+			return crate::Error::Catchall {
 				msg: "unable to serialize OCI spec file".to_owned(),
-				//cause: Box::new(e),
+				cause: Box::new(e),
 			};
 		})?;
 		Ok(())
