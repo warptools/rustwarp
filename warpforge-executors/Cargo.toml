@@ -1,12 +1,12 @@
 [package]
 name = "warpforge-executors"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
 
 [dependencies]
 warpforge-api = { path = "../warpforge-api" }
 
-thiserror = "*"
-tokio = { version = "*", features = ["macros", "rt", "rt-multi-thread", "io-util", "process"] }
-indexmap = { version = "*", features = ["serde"] }
-serde_json = { version = "*", features = ["preserve_order"] }
+thiserror.workspace = true
+tokio.workspace = true
+indexmap.workspace = true
+serde_json.workspace = true

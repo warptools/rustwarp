@@ -8,3 +8,12 @@ members = [
   "catverters-derive",
   "testfiles-derive",
 ]
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+thiserror = "*"
+tokio = { version = "*", features = ["macros", "rt", "rt-multi-thread", "io-util", "process"] }
+indexmap = { version = "*", features = ["serde"] }
+serde_json = { version = "*", features = ["preserve_order"] }
