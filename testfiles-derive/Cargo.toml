@@ -8,7 +8,7 @@ proc-macro = true
 
 [dependencies]
 quote = "*"
-syn = { version = "*", features = ["full"] }
+syn = { version = "1", features = ["full"] }
 proc-macro2 = "*"
 globwalk = "*"
 walkdir = "*"

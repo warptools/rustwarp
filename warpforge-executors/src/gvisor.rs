@@ -1,3 +1,4 @@
+use str_cat::os_str_cat;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
 
@@ -74,19 +75,12 @@ impl GvisorExecutor {
 		task: &crate::ContainerParams,
 	) -> Result<(), crate::Error> {
 		let mut cmd = Command::new("gvisor");
-		cmd.args(
-			["--debug-log=".to_owned() + self.log_dir.to_str().expect("unreachable non-utf8")],
-		);
+		cmd.args([os_str_cat!("--debug-log=", self.log_dir)]);
 		cmd.args(["--debug", "--strace"]);
 		cmd.args(["--rootless"]);
 		cmd.args(["--network=none"]); // must be either this or "host" in gvisor's rootless mode.
 		cmd.args(["run"]);
-		cmd.args(["--bundle=".to_owned()
-			+ self
-				.ersatz_dir
-				.join(ident)
-				.to_str()
-				.expect("unreachable non-utf8")]);
+		cmd.args([os_str_cat!("--bundle=", self.ersatz_dir.join(ident))]);
 		cmd.args([ident]); // container name.
 
 		cmd.stdin(Stdio::null());

@@ -853,6 +853,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "str-cat"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69ad232884467a43bc7a20408dae347cbe1e0ee55a06919051590a74efdbb9db"
+
+[[package]]
 name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1031,8 +1037,9 @@ dependencies = [
 name = "warpforge-executors"
 version = "0.1.0"
 dependencies = [
- "indexmap 1.9.3",
+ "indexmap 2.0.2",
  "serde_json",
+ "str-cat",
  "thiserror",
  "tokio",
  "warpforge-api",

@@ -2,11 +2,12 @@ use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
 use indexmap::IndexMap;
+use str_cat::os_str_cat;
 
+mod errors;
 mod execdemo;
 mod gvisor;
 mod oci;
-mod errors;
 
 pub use errors::Error;
 
@@ -19,9 +20,8 @@ pub use errors::Error;
 pub struct ContainerParams {
 	// TODO
 	// Probably the wfapi::Action structure just comes straight through; don't see why not.
-
 	/// Mounts, mapped by destination.
-	mounts: IndexMap<OsString, MountSpec>
+	mounts: IndexMap<OsString, MountSpec>,
 }
 
 pub struct MountSpec {
@@ -56,29 +56,18 @@ impl MountSpec {
 			options: vec![
 				// Holy smokes string ops in rust are spicy.
 				// Path is not constrained to UTF8, and neither is OsString, so we're staying in those two.
-				// But concatenation isn't really implemented on OsString, at least as far as I can tell while writing this.
-				// We implemented our own.  If I'm wrong and this is in stdlib, plz, PR.  I'm not proud of this.
+				// But concatenation isn't really implemented on OsString, at least not in the std lib, as far as I can tell while writing this.
+				// So there's a crate for that.
 				//
 				// Mind, all of this is a huge farce, because we're going to end up passing these around in JSON anyway.
 				// (For any of the OCI-based executors, that's how we communicate with them.)
 				// And JSON doesn't support non-UTF string sequences.
 				// Whoopsie.
 				// Nonetheless: I do like as much of the code as possible to be correct in handling sequences losslessly.
-				concat_to_osstring("lowerdir=", lowerdir),
-				concat_to_osstring("upperdir=", upperdir),
-				concat_to_osstring("workdir=", workdir),
+				os_str_cat!("lowerdir=", lowerdir),
+				os_str_cat!("upperdir=", upperdir),
+				os_str_cat!("workdir=", workdir),
 			],
 		};
 	}
-}
-
-// future work: make this into a `impl Add<AsRef<OsStr>> for OsString`?
-fn concat_to_osstring<T: AsRef<OsStr> + ?Sized, U: AsRef<OsStr> + ?Sized>(
-	a: &T,
-	b: &U,
-) -> OsString {
-	let mut ret = OsString::with_capacity(a.as_ref().len() + b.as_ref().len());
-	ret.push(a);
-	ret.push(b);
-	ret
 }

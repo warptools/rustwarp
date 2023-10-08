@@ -17,3 +17,4 @@ thiserror = "*"
 tokio = { version = "*", features = ["macros", "rt", "rt-multi-thread", "io-util", "process"] }
 indexmap = { version = "*", features = ["serde"] }
 serde_json = { version = "*", features = ["preserve_order"] }
+str-cat = "*"
