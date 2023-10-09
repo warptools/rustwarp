@@ -85,13 +85,14 @@ impl GvisorExecutor {
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
 		let mut cmd = Command::new("gvisor");
-		cmd.args([os_str_cat!("--debug-log=", self.log_dir)]);
-		cmd.args(["--debug", "--strace"]);
-		cmd.args(["--rootless"]);
-		cmd.args(["--network=none"]); // must be either this or "host" in gvisor's rootless mode.
-		cmd.args(["run"]);
-		cmd.args([os_str_cat!("--bundle=", self.ersatz_dir.join(ident))]);
-		cmd.args([ident]); // container name.
+		cmd.arg(os_str_cat!("--debug-log=", self.log_dir));
+		cmd.arg("--debug");
+		cmd.arg("--strace");
+		cmd.arg("--rootless");
+		cmd.arg("--network=none"); // must be either this or "host" in gvisor's rootless mode.
+		cmd.arg("run");
+		cmd.arg(os_str_cat!("--bundle=", self.ersatz_dir.join(ident)));
+		cmd.arg(ident); // container name.
 
 		cmd.stdin(Stdio::null());
 		cmd.stdout(Stdio::piped());
