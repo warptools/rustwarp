@@ -43,6 +43,11 @@ impl GvisorExecutor {
 		// Build the config data.
 		let mut spec = crate::oci::oci_spec_base();
 		// todo: apply mutations here.
+		let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
+			{ "op": "add", "path": "/process/args", "value": ["/bin/sh", "-c", "echo 'it worked!'"] },
+		]))
+		.unwrap();
+		json_patch::patch(&mut spec, &p).unwrap();
 
 		// Write it out.
 		let cfg_dir = self.ersatz_dir.join(ident);
