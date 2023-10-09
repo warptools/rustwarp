@@ -44,7 +44,14 @@ impl GvisorExecutor {
 		let mut spec = crate::oci::oci_spec_base();
 		// todo: apply mutations here.
 		let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
-			{ "op": "add", "path": "/process/args", "value": ["/bin/sh", "-c", "echo 'it worked!'"] },
+			{ "op": "add", "path": "/process/args", "value": ["/app/bash/bin/bash", "--version"] },
+			{ "op": "replace", "path": "/root/path", "value": "/tmp/rootfs" }, // FIXME: time to get the rest of the supply chain implemented :D
+			// { "op": "add", "path": "/mounts/-", "value": crate::MountSpec{
+			// 		destination: todo!(),
+			// 		kind: todo!(),
+			// 		source: todo!(),
+			// 		options: todo!()
+			// 	}.to_oci_mount() },
 		]))
 		.unwrap();
 		json_patch::patch(&mut spec, &p).unwrap();
