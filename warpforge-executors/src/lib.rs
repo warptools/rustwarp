@@ -5,11 +5,13 @@ use indexmap::IndexMap;
 use str_cat::os_str_cat;
 
 mod errors;
+mod events;
 mod execdemo;
 mod gvisor;
 mod oci;
 
 pub use errors::Error;
+pub use events::Event;
 
 /// This struct contains most of the parameters of a container execution that vary in Warpforge.
 /// It's lower-level than a Formula (we never expose this API to users).

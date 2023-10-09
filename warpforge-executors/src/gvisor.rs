@@ -24,10 +24,14 @@ struct GvisorExecutor {
 }
 
 impl GvisorExecutor {
-	pub async fn run(&self, task: &crate::ContainerParams) -> Result<(), crate::Error> {
+	pub async fn run(
+		&self,
+		task: &crate::ContainerParams,
+		outbox: tokio::sync::mpsc::Sender<crate::Event>,
+	) -> Result<(), crate::Error> {
 		let ident: &str = "containernamegoeshere"; // todo: generate this.
 		self.prep_bundledir(ident, task)?;
-		self.container_exec(ident, task).await?;
+		self.container_exec(ident, task, outbox).await?;
 		Ok(())
 	}
 
@@ -73,6 +77,7 @@ impl GvisorExecutor {
 		&self,
 		ident: &str,
 		task: &crate::ContainerParams,
+		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
 		let mut cmd = Command::new("gvisor");
 		cmd.args([os_str_cat!("--debug-log=", self.log_dir)]);
@@ -98,7 +103,7 @@ impl GvisorExecutor {
 			.take()
 			.expect("child did not have a handle to stdout");
 
-		tokio::spawn(async move {
+		let childwait_handle = tokio::spawn(async move {
 			let status = child
 				.wait()
 				.await
@@ -116,10 +121,19 @@ impl GvisorExecutor {
 				msg: "system io error communicating with subprocess during executor run".to_owned(),
 				cause: Box::new(e),
 			})? {
-			println!("relayed: {}", line);
+			outbox.send(crate::Event{
+				topic: ident.to_owned(),
+				body: crate::events::EventBody::Output{
+					channel: 1,
+					val: line,
+				},
+			}).await.expect("channel must not be closed");
 		}
 
-		Ok(())
+		childwait_handle.await.map_err(|e| crate::Error::Catchall {
+			msg: "error from child process".to_owned(),
+			cause: Box::new(e),
+		})
 	}
 }
 
@@ -128,6 +142,7 @@ mod tests {
 	use std::path::Path;
 
 	use indexmap::IndexMap;
+	use tokio::sync::mpsc;
 
 	#[tokio::main]
 	#[test]
@@ -136,6 +151,7 @@ mod tests {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-gvisor/run").to_owned(),
 			log_dir: Path::new("/tmp/warpforge-test-executor-gvisor/log").to_owned(),
 		};
+		let (gather_chan, mut gather_chan_recv) = mpsc::channel(32);
 		let params = crate::ContainerParams {
 			mounts: (|| {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
@@ -143,6 +159,12 @@ mod tests {
 				// todo: more initializer here
 			})(),
 		};
-		let res = cfg.run(&params).await.expect("it didn't fail");
+		// We let this greenthread sail off into the dark.
+		tokio::spawn(async move {
+			while let Some(evt) = gather_chan_recv.recv().await {
+				println!("event! {:?}", evt)
+			}
+		});
+		let res = cfg.run(&params, gather_chan).await.expect("it didn't fail");
 	}
 }
