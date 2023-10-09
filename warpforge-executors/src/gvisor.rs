@@ -126,13 +126,16 @@ impl GvisorExecutor {
 				msg: "system io error communicating with subprocess during executor run".to_owned(),
 				cause: Box::new(e),
 			})? {
-			outbox.send(crate::Event{
-				topic: ident.to_owned(),
-				body: crate::events::EventBody::Output{
-					channel: 1,
-					val: line,
-				},
-			}).await.expect("channel must not be closed");
+			outbox
+				.send(crate::Event {
+					topic: ident.to_owned(),
+					body: crate::events::EventBody::Output {
+						channel: 1,
+						val: line,
+					},
+				})
+				.await
+				.expect("channel must not be closed");
 		}
 
 		childwait_handle.await.map_err(|e| crate::Error::Catchall {
