@@ -96,14 +96,14 @@ mod tests {
 	#[test]
 	fn test_1() {
 		check_json_roundtrip_CatalogModuleCapsule(expect![[r#"
-			{
-				"catalogmodule.v1": {
-					"name": "warpsys.org/gawk",
-					"releases": {
-						"v5.1.1": "zM5K3TQtn57apb6hjS6A2LHsDW6FnD3m4xtECuZMqYLNMP42FxVsHxFbFEJ5jUrupoxi2Uv"
-					},
-					"metadata": {}
-				}
-			}"#]])
+    {
+    	"catalogmodule.v1": {
+    		"name": "warpsys.org/gawk",
+    		"releases": {
+    			"v5.1.1": "zM5K3TQtn57apb6hjS6A2LHsDW6FnD3m4xtECuZMqYLNMP42FxVsHxFbFEJ5jUrupoxi2Uv"
+    		},
+    		"metadata": {}
+    	}
+    }"#]])
 	}
 }
