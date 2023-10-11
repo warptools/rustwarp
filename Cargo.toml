@@ -19,3 +19,4 @@ indexmap = { version = "*", features = ["serde"] }
 serde_json = { version = "*", features = ["preserve_order"] }
 str-cat = "*"
 json-patch = "*"
+expect-test = "*"

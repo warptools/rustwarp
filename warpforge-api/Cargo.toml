@@ -16,3 +16,4 @@ serde_with = "*"
 memchr = "*"
 rstest = "*"
 derive_more = "*"
+expect-test.workspace = true
