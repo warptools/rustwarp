@@ -6,7 +6,6 @@ use str_cat::os_str_cat;
 
 mod errors;
 mod events;
-mod execdemo;
 mod gvisor;
 mod oci;
 
