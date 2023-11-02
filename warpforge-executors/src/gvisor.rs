@@ -44,7 +44,7 @@ impl GvisorExecutor {
 		let mut spec = crate::oci::oci_spec_base();
 		// todo: apply mutations here.
 		let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
-			{ "op": "add", "path": "/process/args", "value": ["/app/bash/bin/bash", "--version"] },
+			{ "op": "add", "path": "/process/args", "value": ["/bin/bash", "--version"] },
 			{ "op": "replace", "path": "/root/path", "value": "/tmp/rootfs" }, // FIXME: time to get the rest of the supply chain implemented :D
 			// { "op": "add", "path": "/mounts/-", "value": crate::MountSpec{
 			// 		destination: todo!(),
@@ -58,9 +58,18 @@ impl GvisorExecutor {
 
 		// Write it out.
 		let cfg_dir = self.ersatz_dir.join(ident);
-		fs::create_dir_all(&cfg_dir).map_err(|e| crate::Error::Catchall {
-			msg: "failed during executor internals: couldn't create bundle dir".to_owned(),
-			cause: Box::new(e),
+		fs::create_dir_all(&cfg_dir).map_err(|e| {
+			let msg = "failed during executor internals: couldn't create bundle dir".to_owned();
+			match e.kind() {
+				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+					msg: msg,
+					cause: Box::new(e),
+				},
+				_ => crate::Error::SystemRuntimeError {
+					msg: msg,
+					cause: Box::new(e),
+				},
+			}
 		})?;
 		let f = fs::File::create(cfg_dir.join("config.json")) // Must literally be this name within bundle dir.
 			.map_err(|e| crate::Error::Catchall {
@@ -106,7 +115,23 @@ impl GvisorExecutor {
 		cmd.stderr(Stdio::inherit());
 
 		println!("about to spawn");
-		let mut child = cmd.spawn().expect("failed to spawn command");
+		let mut child = cmd.spawn().map_err(|e| {
+			let msg = "failed to spawn containerization process".to_owned();
+			match e.kind() {
+				std::io::ErrorKind::NotFound => crate::Error::SystemSetupError {
+					msg: msg,
+					cause: Box::new(e),
+				},
+				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+					msg: msg,
+					cause: Box::new(e),
+				},
+				_ => crate::Error::SystemRuntimeError {
+					msg: msg,
+					cause: Box::new(e),
+				},
+			}
+		})?;
 		println!("somehow, spawned");
 
 		// Take handles to the IO before we spawn the exit wait.
