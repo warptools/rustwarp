@@ -6,7 +6,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
 
-struct GvisorExecutor {
+#[allow(dead_code)] // Public API
+pub struct GvisorExecutor {
 	/// Path to use for:
 	///   - the generated short-lived container spec files
 	///   - the generated rootfs dir (into which mounts are landed!)
@@ -24,6 +25,7 @@ struct GvisorExecutor {
 }
 
 impl GvisorExecutor {
+	#[allow(dead_code)] // Public API
 	pub async fn run(
 		&self,
 		task: &crate::ContainerParams,
@@ -38,7 +40,7 @@ impl GvisorExecutor {
 	fn prep_bundledir(
 		&self,
 		ident: &str,
-		task: &crate::ContainerParams,
+		_task: &crate::ContainerParams,
 	) -> Result<(), crate::Error> {
 		// Build the config data.
 		let mut spec = crate::oci::oci_spec_base();
@@ -97,7 +99,7 @@ impl GvisorExecutor {
 	async fn container_exec(
 		&self,
 		ident: &str,
-		task: &crate::ContainerParams,
+		_task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
 		let mut cmd = Command::new("gvisor");
@@ -206,6 +208,6 @@ mod tests {
 				println!("event! {:?}", evt)
 			}
 		});
-		let res = cfg.run(&params, gather_chan).await.expect("it didn't fail");
+		let _result = cfg.run(&params, gather_chan).await.expect("it didn't fail");
 	}
 }
