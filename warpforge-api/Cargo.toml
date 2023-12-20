@@ -6,14 +6,16 @@ edition = "2021"
 [dependencies]
 catverters = { path = "../catverters" }
 catverters-derive = { path = "../catverters-derive" }
-testfiles-derive = { path = "../testfiles-derive" }
 
 indexmap = { version = "*", features = ["serde"] }
-indoc = "*"
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*", features = ["preserve_order"] }
 serde_with = "*"
-memchr = "*"
-rstest = "*"
 derive_more = "*"
+
+[dev-dependencies]
+testfiles-derive = { path = "../testfiles-derive" }
+
+memchr = "*"
+indoc = "*"
 expect-test.workspace = true

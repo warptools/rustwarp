@@ -1,7 +1,8 @@
 pub mod catalog;
 pub mod compute;
 pub mod content;
+pub mod formula;
+pub mod plot;
 
-// pub use self::content::*;
-// pub use self::catalog::*;
-// pub use self::compute::*;
+#[cfg(test)]
+mod test_common;
