@@ -64,11 +64,11 @@ impl GvisorExecutor {
 			let msg = "failed during executor internals: couldn't create bundle dir".to_owned();
 			match e.kind() {
 				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
-					msg: msg,
+					msg,
 					cause: Box::new(e),
 				},
 				_ => crate::Error::SystemRuntimeError {
-					msg: msg,
+					msg,
 					cause: Box::new(e),
 				},
 			}
@@ -88,10 +88,10 @@ impl GvisorExecutor {
 					cause: Box::new(Into::<std::io::Error>::into(e)),
 				};
 			}
-			return crate::Error::Catchall {
+			crate::Error::Catchall {
 				msg: "unable to serialize OCI spec file".to_owned(),
 				cause: Box::new(e),
-			};
+			}
 		})?;
 		Ok(())
 	}
@@ -121,15 +121,15 @@ impl GvisorExecutor {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {
 				std::io::ErrorKind::NotFound => crate::Error::SystemSetupError {
-					msg: msg,
+					msg,
 					cause: Box::new(e),
 				},
 				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
-					msg: msg,
+					msg,
 					cause: Box::new(e),
 				},
 				_ => crate::Error::SystemRuntimeError {
-					msg: msg,
+					msg,
 					cause: Box::new(e),
 				},
 			}
@@ -196,11 +196,11 @@ mod tests {
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel(32);
 		let params = crate::ContainerParams {
-			mounts: (|| {
+			mounts: {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
 				IndexMap::new()
 				// todo: more initializer here
-			})(),
+			},
 		};
 		// We let this greenthread sail off into the dark.
 		tokio::spawn(async move {
@@ -208,6 +208,6 @@ mod tests {
 				println!("event! {:?}", evt)
 			}
 		});
-		let _result = cfg.run(&params, gather_chan).await.expect("it didn't fail");
+		cfg.run(&params, gather_chan).await.expect("it didn't fail");
 	}
 }

@@ -83,7 +83,7 @@ pub fn derive_stringoid(input: TokenStream) -> TokenStream {
 				let my_unnamed_fields_count = fields.unnamed.iter().count();
 				format!("a struct with {} unnamed fields", my_unnamed_fields_count)
 			}
-			syn::Fields::Unit => format!("a unit struct"),
+			syn::Fields::Unit => "a unit struct".to_string(),
 		},
 		syn::Data::Enum(typ) => {
 			let my_variant_idents = typ.variants.iter().map(|it| &it.ident);
