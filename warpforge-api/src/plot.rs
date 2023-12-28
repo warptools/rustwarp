@@ -17,10 +17,10 @@ pub struct Plot {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
-pub struct LocalLabel(String);
+pub struct LocalLabel(pub String);
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
-pub struct StepName(String);
+pub struct StepName(pub String);
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub enum PlotInput {

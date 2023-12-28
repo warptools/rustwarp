@@ -3,6 +3,7 @@ resolver = "2"
 members = [
   "warpforge-api",
   "warpforge-cli",
+  "warpforge-visualize",
   "warpforge-executors",
   "catverters",
   "catverters-derive",

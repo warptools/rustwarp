@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 
 // FUTURE: Could be represneted as an enum, discriminating on the first char being '/' or '$'
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
-pub struct SandboxPort(String);
+pub struct SandboxPort(pub String);
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GatherDirective {
-	from: SandboxPort,
-	packtype: Option<crate::content::Packtype>,
+	pub from: SandboxPort,
+	pub packtype: Option<crate::content::Packtype>,
 	// TODO:
 	// filters: Option<FilterMap>,
 }
@@ -27,15 +27,15 @@ pub enum Action {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionExecute {
-	command: Vec<String>,
+	pub command: Vec<String>,
 	#[serde(default, skip_serializing_if = "<&bool>::not")]
-	network: bool,
+	pub network: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionScript {
-	interpreter: String,
-	contents: Vec<String>,
+	pub interpreter: String,
+	pub contents: Vec<String>,
 	#[serde(default, skip_serializing_if = "<&bool>::not")]
-	network: bool,
+	pub network: bool,
 }
