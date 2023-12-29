@@ -1,5 +1,7 @@
-use warpforge_visualize::test;
+//! Main used for testing only. CLI is implemented in warpforge-cli.
+
+use warpforge_visualize::graph_dependencies;
 
 fn main() {
-	test();
+	graph_dependencies("bash");
 }

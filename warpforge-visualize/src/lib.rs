@@ -1,14 +1,19 @@
+//! This code is a proof of concept for creating a graph of warpforge dependencies.
+
+// There are some useful functions and structs that are not currently used.
+// TODO: Remove the following line when cleaning up the code.
+#![allow(dead_code)]
+
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::Display;
 use std::fmt::Formatter;
-use std::ops::Index;
 
 use derive_more::Display;
-
 use indexmap::IndexMap;
 use reqwest::StatusCode;
 use reqwest::Url;
+
 use warpforge_api::plot::Plot;
 use warpforge_api::plot::PlotCapsule;
 use warpforge_api::plot::PlotInput;
@@ -18,6 +23,12 @@ use warpforge_api::plot::Step;
 const WARPSYS_URL: &str = "https://raw.githubusercontent.com/janispeyer/warpsys/master";
 const WARPSYS_CATALOG_DOMAIN: &str = "warpsys.org";
 const PLOT_FILENAME: &str = "plot.wf";
+
+pub fn graph_dependencies(package: &str) {
+	let warpsys_url = Url::parse(WARPSYS_URL).unwrap();
+	let plots = fetch_warpsys_plot_recursively(&warpsys_url, package);
+	println!("{}", create_graph(&plots, package));
+}
 
 #[derive(Default, Clone, Debug)]
 pub(crate) struct Graph(Vec<Statement>);
@@ -329,10 +340,13 @@ pub(crate) fn create_graph(plots: &IndexMap<String, Plot>, package: &str) -> Gra
 			let Some(other_package) = package_name(input) else { continue; };
 			if plots.contains_key(other_package) {
 				if visited.contains(other_package) {
-					graph.add_edge(
-						Edge::new(other_package.to_string(), package.clone())
-							.with_constraint(false),
+					let decoupled = format!("{}:{}", package, other_package);
+					graph.add_node(
+						Node::new(decoupled.clone())
+							.with_label(other_package.to_string())
+							.with_color("blue".to_string()),
 					);
+					graph.add_edge(Edge::new(decoupled, package.clone()));
 				} else {
 					graph.add_edge(Edge::new(other_package.to_string(), package.clone()));
 					next_packages.push_back(other_package.to_string());
@@ -345,11 +359,4 @@ pub(crate) fn create_graph(plots: &IndexMap<String, Plot>, package: &str) -> Gra
 	}
 
 	graph
-}
-
-pub fn test() {
-	let package = "bash";
-	let warpsys_url = Url::parse(WARPSYS_URL).unwrap();
-	let plots = fetch_warpsys_plot_recursively(&warpsys_url, package);
-	println!("{}", create_graph(&plots, package));
 }

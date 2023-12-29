@@ -93,6 +93,10 @@ fn main2() -> Result<(), Error> {
 				Ok(())
 			}
 		},
+		Some(cmds::Subcommands::Graph(cmd)) => {
+			warpforge_visualize::graph_dependencies(&cmd.package);
+			Ok(())
+		}
 		None => {
 			println!("command used with no args.  some explanation text should go here :)");
 			Ok(())

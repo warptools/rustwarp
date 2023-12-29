@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 warpforge-api = { path = "../warpforge-api" }
+warpforge-visualize = { path = "../warpforge-visualize" }
 
 clap = { version = "4.3.0", features = ["derive"] }
 serde = { version = "1" }
