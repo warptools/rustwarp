@@ -28,14 +28,14 @@ pub enum Action {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionExecute {
 	pub command: Vec<String>,
-	#[serde(default, skip_serializing_if = "<&bool>::not")]
-	pub network: bool,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub network: Option<bool>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionScript {
 	pub interpreter: String,
 	pub contents: Vec<String>,
-	#[serde(default, skip_serializing_if = "<&bool>::not")]
-	pub network: bool,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub network: Option<bool>,
 }
