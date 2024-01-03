@@ -19,8 +19,7 @@ use warpforge_api::plot::PlotCapsule;
 use warpforge_api::plot::PlotInput;
 use warpforge_api::plot::Step;
 
-// Currently using my own fork of warpsys, since there are invalid json files in upstream.
-const WARPSYS_URL: &str = "https://raw.githubusercontent.com/janispeyer/warpsys/master";
+const WARPSYS_URL: &str = "https://raw.githubusercontent.com/warptools/warpsys/master";
 const WARPSYS_CATALOG_DOMAIN: &str = "warpsys.org";
 const PLOT_FILENAME: &str = "plot.wf";
 
