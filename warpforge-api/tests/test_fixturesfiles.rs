@@ -42,12 +42,12 @@ use testfiles_derive::test_per_file;
 // Okay the amazing thing is, it works.
 // The mild bummer thing is, I think VSCode's integrations making a "Run Test" button are going for a specific name, and filter it back out.  I don't know how others like `rstest` get around this (or if they're just blessed at this point).
 // Ah, yes, and of course the murderously bad thing is... cargo test caching is too smart.
-#[test_per_file(glob = "fixtures/workflow_*.json")]
+#[test_per_file(glob = "fixtures/plot_*.json")]
 fn test_fixture(file_path: &Path) {
 	let content = fs::read(file_path).unwrap();
 	let hunks = split_by_delimiter(content.as_slice());
 
-	let result: Result<warpforge_api::compute::Workflow, _> = serde_json::from_slice(hunks[0]);
+	let result: Result<warpforge_api::plot::PlotCapsule, _> = serde_json::from_slice(hunks[0]);
 	match result {
 		Ok(value) => {
 			assert_eq!(std::str::from_utf8(hunks[1]).unwrap(), "success\n");

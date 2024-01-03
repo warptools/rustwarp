@@ -1,5 +1,4 @@
 pub mod catalog;
-pub mod compute;
 pub mod content;
 pub mod formula;
 pub mod plot;
