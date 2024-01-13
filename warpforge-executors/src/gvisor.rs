@@ -120,11 +120,7 @@ impl GvisorExecutor {
 		let mut child = cmd.spawn().map_err(|e| {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {
-				std::io::ErrorKind::NotFound => crate::Error::SystemSetupError {
-					msg,
-					cause: Box::new(e),
-				},
-				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+				std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
 					msg,
 					cause: Box::new(e),
 				},
