@@ -1,4 +1,6 @@
 use catverters_derive;
+use derive_more::{Display, FromStr};
+use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
@@ -12,6 +14,9 @@ pub enum ContentRef {
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub struct WareID {
-	packtype: String,
+	packtype: Packtype,
 	hash: String,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
+pub struct Packtype(String);

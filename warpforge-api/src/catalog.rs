@@ -73,37 +73,23 @@ For example:
 
 #[cfg(test)]
 mod tests {
-	use expect_test::{expect, Expect};
-	use serde::Serializer;
+	use super::*;
 
-	#[allow(non_snake_case)] // The function is named after the type.  Hush.
-	fn check_json_roundtrip_CatalogModuleCapsule(expect: Expect) {
-		let fixture = expect.data;
-		let obj: super::CatalogModuleCapsule = serde_json::from_str(fixture).unwrap();
-		let reserialized = pretty_json(obj).expect("serialization shouldn't fail");
-		expect.assert_eq(&reserialized);
-	}
-
-	fn pretty_json<T: serde::Serialize>(obj: T) -> Result<String, serde_json::Error> {
-		let mut buf = Vec::new();
-		let formatter = serde_json::ser::PrettyFormatter::with_indent(b"\t");
-		let mut serializer = serde_json::Serializer::with_formatter(&mut buf, formatter);
-		serializer.serialize_some(&obj)?;
-		let s = String::from_utf8(buf).expect("serde_json does not emit non utf8");
-		Ok(s)
-	}
+	use crate::test_common::assert_eq_json_roundtrip;
+	use expect_test::expect;
 
 	#[test]
 	fn test_1() {
-		check_json_roundtrip_CatalogModuleCapsule(expect![[r#"
-    {
-    	"catalogmodule.v1": {
-    		"name": "warpsys.org/gawk",
-    		"releases": {
-    			"v5.1.1": "zM5K3TQtn57apb6hjS6A2LHsDW6FnD3m4xtECuZMqYLNMP42FxVsHxFbFEJ5jUrupoxi2Uv"
-    		},
-    		"metadata": {}
-    	}
-    }"#]])
+		let expect = expect![[r#"
+            {
+              "catalogmodule.v1": {
+                "name": "warpsys.org/gawk",
+                "releases": {
+                  "v5.1.1": "zM5K3TQtn57apb6hjS6A2LHsDW6FnD3m4xtECuZMqYLNMP42FxVsHxFbFEJ5jUrupoxi2Uv"
+                },
+                "metadata": {}
+              }
+            }"#]];
+		assert_eq_json_roundtrip::<CatalogModuleCapsule>(&expect);
 	}
 }

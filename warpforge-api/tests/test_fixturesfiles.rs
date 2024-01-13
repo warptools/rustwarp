@@ -42,26 +42,23 @@ use testfiles_derive::test_per_file;
 // Okay the amazing thing is, it works.
 // The mild bummer thing is, I think VSCode's integrations making a "Run Test" button are going for a specific name, and filter it back out.  I don't know how others like `rstest` get around this (or if they're just blessed at this point).
 // Ah, yes, and of course the murderously bad thing is... cargo test caching is too smart.
-#[test_per_file(glob = "fixtures/workflow_*.json")]
+#[test_per_file(glob = "fixtures/plot_*.json")]
 fn test_fixture(file_path: &Path) {
 	let content = fs::read(file_path).unwrap();
 	let hunks = split_by_delimiter(content.as_slice());
 
-	let result: Result<warpforge_api::compute::Workflow, _> = serde_json::from_slice(&hunks[0]);
+	let result: Result<warpforge_api::plot::PlotCapsule, _> = serde_json::from_slice(hunks[0]);
 	match result {
 		Ok(value) => {
-			assert_eq!(std::str::from_utf8(&hunks[1]).unwrap(), "success\n");
+			assert_eq!(std::str::from_utf8(hunks[1]).unwrap(), "success\n");
 
 			let reserialized = serde_json::to_string(&value).unwrap();
-			let foobar: serde_json::Value = serde_json::from_slice(&hunks[0]).unwrap();
+			let foobar: serde_json::Value = serde_json::from_slice(hunks[0]).unwrap();
 			let normalized = serde_json::to_string(&foobar).unwrap();
 			assert_eq!(reserialized, normalized);
 		}
 		Err(err) => {
-			assert_eq!(
-				std::str::from_utf8(&hunks[1]).unwrap(),
-				format!("{}\n", err)
-			);
+			assert_eq!(std::str::from_utf8(hunks[1]).unwrap(), format!("{}\n", err));
 		}
 	}
 }
@@ -74,7 +71,7 @@ fn test_fixture(file_path: &Path) {
 // (Any time you go from `&[T]` to `Vec<T>`, you've taken ownership of something you didn't previously own,
 // and that means an allocation had to occur somewhere (even if an implicit clone might have hidden it).
 // That means if you tried to make this function as `Vec<u8> -> Vec<Vec<u8>>`, you'd have a copy-monster!)
-fn split_by_delimiter<'a>(splitme: &'a [u8]) -> Vec<&'a [u8]> {
+fn split_by_delimiter(splitme: &[u8]) -> Vec<&[u8]> {
 	let separator_bytes = b"\n---\n";
 	let mut result = Vec::new();
 	let mut current_chunk_start = 0;
@@ -90,5 +87,5 @@ fn split_by_delimiter<'a>(splitme: &'a [u8]) -> Vec<&'a [u8]> {
 		result.push(&splitme[current_chunk_start..]);
 	}
 
-	return result;
+	result
 }

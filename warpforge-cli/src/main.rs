@@ -66,7 +66,7 @@ fn main2() -> Result<(), Error> {
 			cmds::ware::Subcommands::Unpack(cmd) => {
 				use std::io::{BufRead, BufReader};
 				use std::process::{Command, Stdio};
-				let sources = cmd.fetch_url.iter().map(|s| "--source=".to_string() + &s);
+				let sources = cmd.fetch_url.iter().map(|s| "--source=".to_string() + s);
 				let dest = match &cmd.dest {
 					Some(s) => s,
 					None => "unpack_default", // TODO find and use package name string
@@ -93,6 +93,10 @@ fn main2() -> Result<(), Error> {
 				Ok(())
 			}
 		},
+		Some(cmds::Subcommands::Graph(cmd)) => {
+			warpforge_visualize::graph_dependencies(&cmd.package);
+			Ok(())
+		}
 		None => {
 			println!("command used with no args.  some explanation text should go here :)");
 			Ok(())

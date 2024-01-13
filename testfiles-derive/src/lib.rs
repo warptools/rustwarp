@@ -34,7 +34,6 @@ pub fn test_per_file(attr: TokenStream, item: TokenStream) -> TokenStream {
 	let walker = globwalk::GlobWalkerBuilder::from_patterns(&start_path, &[pattern])
 		.build()
 		.unwrap()
-		.into_iter()
 		.filter_map(Result::ok);
 
 	// For each found path: make a new token stream with a test declaration.  Collect a vec.
@@ -74,7 +73,7 @@ pub fn test_per_file(attr: TokenStream, item: TokenStream) -> TokenStream {
 			}
 		})
 		.collect::<Vec<_>>();
-	if tests.len() < 1 {
+	if tests.is_empty() {
 		panic!(
 			"this glob matched no files!  (hint: your cwd is {:?}.  we searched at {:?})",
 			env::current_dir().unwrap(),
@@ -95,7 +94,6 @@ pub fn test_per_file(attr: TokenStream, item: TokenStream) -> TokenStream {
 	quote! {
 	  #input
 
-	  #[cfg(test)]
 	  mod #test_module_name {
 	  use std::path::Path;
 
