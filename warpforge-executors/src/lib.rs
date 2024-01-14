@@ -8,6 +8,7 @@ mod errors;
 mod events;
 mod gvisor;
 mod oci;
+mod runc;
 
 pub use errors::Error;
 pub use events::Event;

@@ -1,5 +1,5 @@
 hard_tabs = true
-
+edition = "2021"
 # merge_derives = false
 ## Doesn't do what it says it does.
 ##

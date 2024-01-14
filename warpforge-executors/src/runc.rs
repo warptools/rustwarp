@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::process::Stdio;
 
 #[allow(dead_code)] // Public API
-pub struct GvisorExecutor {
+pub struct Executor {
 	/// Path to use for:
 	///   - the generated short-lived container spec files
 	///   - the generated rootfs dir (into which mounts are landed!)
@@ -19,12 +19,11 @@ pub struct GvisorExecutor {
 	/// But really, the rate at which I want to intentionally specify those is, uh.  Approximately never.
 	pub ersatz_dir: PathBuf,
 
-	/// Path used to store logs.
-	/// We'll create a whole directory in this per invocation, because gvisor creates many log files per container.
-	pub log_dir: PathBuf,
+	/// File to write logs.
+	pub log_file: PathBuf,
 }
 
-impl GvisorExecutor {
+impl Executor {
 	#[allow(dead_code)] // Public API
 	pub async fn run(
 		&self,
@@ -44,9 +43,25 @@ impl GvisorExecutor {
 	) -> Result<(), crate::Error> {
 		// Build the config data.
 		let mut spec = crate::oci::oci_spec_base();
+
+		use syscalls::{syscall, Sysno};
+		let uid = match unsafe { syscall!(Sysno::getuid) } {
+			Ok(uid) => uid,
+			Err(err) => {
+				eprintln!("syscall getuid() failed: {}", err);
+				0
+			}
+		};
+		let gid = match unsafe { syscall!(Sysno::getgid) } {
+			Ok(id) => id,
+			Err(err) => {
+				eprintln!("syscall getgid() failed: {}", err);
+				0
+			}
+		};
 		// todo: apply mutations here.
 		let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
-			{ "op": "add", "path": "/process/args", "value": ["/bin/bash", "--version"] },
+			{ "op": "add", "path": "/process/args", "value": ["/bin/busybox", "--help"] },
 			{ "op": "replace", "path": "/root/path", "value": "/tmp/rootfs" }, // FIXME: time to get the rest of the supply chain implemented :D
 			// { "op": "add", "path": "/mounts/-", "value": crate::MountSpec{
 			// 		destination: todo!(),
@@ -54,6 +69,11 @@ impl GvisorExecutor {
 			// 		source: todo!(),
 			// 		options: todo!()
 			// 	}.to_oci_mount() },
+			{ "op": "add", "path": "/linux/uidMappings", "value":
+			   [{"containerID": 0, "hostID": uid, "size": 1}]},
+			{ "op": "add", "path": "/linux/gidMappings", "value":
+			   [{"containerID": 0, "hostID": gid, "size": 1}]},
+			{ "op": "add", "path": "/linux/namespaces/-", "value": {"type": "user"}},
 		]))
 		.unwrap();
 		json_patch::patch(&mut spec, &p).unwrap();
@@ -80,7 +100,7 @@ impl GvisorExecutor {
 						.to_owned(),
 				cause: Box::new(e),
 			})?;
-		serde_json::to_writer(f, &spec).map_err(|e| {
+		serde_json::to_writer_pretty(f, &spec).map_err(|e| {
 			if e.is_io() {
 				return crate::Error::Catchall {
 					msg: "failed during executor internals: io error writing config file"
@@ -102,12 +122,9 @@ impl GvisorExecutor {
 		_task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
-		let mut cmd = Command::new("gvisor");
-		cmd.arg(os_str_cat!("--debug-log=", self.log_dir));
+		let mut cmd = Command::new("runc");
+		cmd.arg(os_str_cat!("--log=", self.log_file));
 		cmd.arg("--debug");
-		cmd.arg("--strace");
-		cmd.arg("--rootless");
-		cmd.arg("--network=none"); // must be either this or "host" in gvisor's rootless mode.
 		cmd.arg("run");
 		cmd.arg(os_str_cat!("--bundle=", self.ersatz_dir.join(ident)));
 		cmd.arg(ident); // container name.
@@ -116,14 +133,16 @@ impl GvisorExecutor {
 		cmd.stdout(Stdio::piped());
 		cmd.stderr(Stdio::inherit());
 
-		println!("about to spawn");
+		println!("about to spawn cmd with runc");
 		let mut child = cmd.spawn().map_err(|e| {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {
-				std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
-					msg,
-					cause: Box::new(e),
-				},
+				std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied => {
+					crate::Error::SystemSetupError {
+						msg,
+						cause: Box::new(e),
+					}
+				}
 				_ => crate::Error::SystemRuntimeError {
 					msg,
 					cause: Box::new(e),
@@ -185,10 +204,10 @@ mod tests {
 
 	#[tokio::main]
 	#[test]
-	async fn gvisor_it_works() {
-		let cfg = super::GvisorExecutor {
-			ersatz_dir: Path::new("/tmp/warpforge-test-executor-gvisor/run").to_owned(),
-			log_dir: Path::new("/tmp/warpforge-test-executor-gvisor/log").to_owned(),
+	async fn runc_it_works() {
+		let cfg = crate::runc::Executor {
+			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
+			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel(32);
 		let params = crate::ContainerParams {
