@@ -192,6 +192,7 @@ mod tests {
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel(32);
 		let params = crate::ContainerParams {
+			action: warpforge_api::formula::Action::Echo,
 			mounts: {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
 				IndexMap::new()

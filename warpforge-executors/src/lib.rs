@@ -22,6 +22,7 @@ pub use events::Event;
 pub struct ContainerParams {
 	// TODO
 	// Probably the wfapi::Action structure just comes straight through; don't see why not.
+	action: warpforge_api::formula::Action,
 	/// Mounts, mapped by destination.
 	mounts: IndexMap<OsString, MountSpec>,
 }
