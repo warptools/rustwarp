@@ -9,7 +9,8 @@
 /// on containers, however, we need to relay input more or less constantly.)
 #[derive(Debug)]
 pub struct Event {
-	pub topic: String, /// Generally, the container ident.
+	pub topic: String,
+	/// Generally, the container ident.
 	pub body: EventBody,
 }
 
@@ -21,5 +22,5 @@ pub enum EventBody {
 		channel: i32,
 		val: String, // FIXME String is most certainly not the right type here.  Find the right tokio reader system to return either Bytes, Vec<u8>, OsStr, or something sensible like that.
 	},
-	// FUTURE: exit code probably coming here.
+	ExitCode(Option<i32>),
 }

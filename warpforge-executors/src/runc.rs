@@ -158,6 +158,8 @@ impl Executor {
 			.take()
 			.expect("child did not have a handle to stdout");
 
+		let ident2 = ident.to_owned();
+		let outbox2 = outbox.clone();
 		let childwait_handle = tokio::spawn(async move {
 			let status = child
 				.wait()
@@ -165,6 +167,13 @@ impl Executor {
 				.expect("child process encountered an error");
 			// FIXME errors need to go to a channel.
 			println!("child status was: {}", status);
+			outbox2
+				.send(crate::Event {
+					topic: ident2,
+					body: crate::events::EventBody::ExitCode(status.code()),
+				})
+				.await
+				.expect("channel must not be closed");
 		});
 
 		let mut reader = tokio::io::BufReader::new(stdout).lines();
@@ -209,7 +218,7 @@ mod tests {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
 			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
 		};
-		let (gather_chan, mut gather_chan_recv) = mpsc::channel(32);
+		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 		let params = crate::ContainerParams {
 			mounts: {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
@@ -217,12 +226,22 @@ mod tests {
 				// todo: more initializer here
 			},
 		};
-		// We let this greenthread sail off into the dark.
-		tokio::spawn(async move {
+
+		// empty gather_chan
+		let gather_handle = tokio::spawn(async move {
 			while let Some(evt) = gather_chan_recv.recv().await {
-				println!("event! {:?}", evt)
+				match evt.body {
+					crate::events::EventBody::Output { .. } => {}
+					crate::events::EventBody::ExitCode(code) => {
+						assert_eq!(code, Some(0));
+						break; // stop processing events
+					}
+				};
+				println!("event! {:?}", evt);
 			}
 		});
+
 		cfg.run(&params, gather_chan).await.expect("it didn't fail");
+		gather_handle.await.expect("gathering events failed");
 	}
 }
