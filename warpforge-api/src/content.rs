@@ -12,7 +12,16 @@ pub enum ContentRef {
 	// TODO Ingest, Mount, etc, etc.
 }
 
-#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
+#[derive(
+	Clone,
+	Debug,
+	SerializeDisplay,
+	PartialEq,
+	Eq,
+	Hash,
+	DeserializeFromStr,
+	catverters_derive::Stringoid,
+)]
 pub struct WareID {
 	packtype: Packtype,
 	hash: String,
