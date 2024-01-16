@@ -25,6 +25,7 @@ pub struct ContainerParams {
 	action: warpforge_api::formula::Action,
 	/// Mounts, mapped by destination.
 	mounts: IndexMap<OsString, MountSpec>,
+	root_path: String,
 }
 
 pub struct MountSpec {

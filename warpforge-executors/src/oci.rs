@@ -30,7 +30,6 @@ impl ToOCIMount for crate::MountSpec {
 // but at the moment, I don't see how using it would provide significant value.
 // And I'm outright suspicious of some of it -- such as https://docs.rs/oci-spec/0.6.2/src/oci_spec/runtime/miscellaneous.rs.html#161 -- what's that "gid=5" special case doing there??)
 
-
 fn oci_spec_default_caps() -> serde_json::Value {
 	json!(["CAP_AUDIT_WRITE", "CAP_KILL", "CAP_NET_BIND_SERVICE"])
 }

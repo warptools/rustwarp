@@ -74,7 +74,7 @@ impl Executor {
 		// todo: apply mutations here.
 		let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
 			{ "op": "add", "path": "/process/args", "value": args },
-			{ "op": "replace", "path": "/root/path", "value": "/tmp/rootfs" }, // FIXME: time to get the rest of the supply chain implemented :D
+			{ "op": "replace", "path": "/root/path", "value": task.root_path }, // FIXME: time to get the rest of the supply chain implemented :D
 			{ "op": "add", "path": "/linux/uidMappings", "value":
 			   [{"containerID": 0, "hostID": uid, "size": 1}]},
 			{ "op": "add", "path": "/linux/gidMappings", "value":
@@ -246,6 +246,7 @@ mod tests {
 				IndexMap::new()
 				// todo: more initializer here
 			},
+			root_path: "/tmp/rootfs".to_string(),
 		};
 
 		// empty gather_chan
