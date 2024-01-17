@@ -1,3 +1,6 @@
+use std::io::Write;
+use std::path::PathBuf;
+
 #[allow(dead_code)]
 pub enum Formula {
 	Runc(crate::runc::Executor),
@@ -5,6 +8,12 @@ pub enum Formula {
 }
 
 impl Formula {
+	const CONTAINER_BASE_PATH: &str = "/.warpforge.container";
+
+	pub fn container_script_path() -> PathBuf {
+		PathBuf::from(Self::CONTAINER_BASE_PATH).join("script")
+	}
+
 	#[allow(dead_code)]
 	pub async fn run(
 		&self,
@@ -13,15 +22,97 @@ impl Formula {
 	) -> Result<(), crate::Error> {
 		use indexmap::IndexMap;
 		use warpforge_api::formula;
+
+		let mut mounts = IndexMap::new();
+		let ersatz_dir = match self {
+			self::Formula::Runc(crate::runc::Executor { ersatz_dir, .. }) => ersatz_dir,
+		};
+
+		use warpforge_api::formula::Action;
+		let action = match formula_and_context.formula {
+			formula::FormulaCapsule::V1(formula::Formula { action, .. }) => action,
+		};
+		let command: Vec<String> = match &action {
+			Action::Echo => vec![
+				"echo".to_string(),
+				"what is the \"Echo\" Action for?".to_string(),
+			]
+			.to_owned(),
+			Action::Execute(a) => a.command.to_owned(),
+			Action::Script(a) => {
+				let script_dir = ersatz_dir.join("script");
+				use std::fs;
+				fs::create_dir_all(&script_dir).map_err(|e| {
+					let msg =
+						"failed during formula execution: couldn't create script dir".to_owned();
+					match e.kind() {
+						std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+							msg,
+							cause: Box::new(e),
+						},
+						_ => crate::Error::SystemRuntimeError {
+							msg,
+							cause: Box::new(e),
+						},
+					}
+				})?;
+
+				let mut script_file = fs::File::create(script_dir.join("run")).map_err(|e| {
+					crate::Error::Catchall {
+						msg: "failed during formula execution:".to_owned()
+							+ &" couldn't open script file for writing".to_owned(),
+						cause: Box::new(e),
+					}
+				})?;
+
+				for (n, line) in a.contents.iter().enumerate() {
+					let entry_file_name = format!("entry-{}", n);
+					let mut entry_file = fs::File::create(script_dir.join(&entry_file_name))
+						.map_err(|e| crate::Error::Catchall {
+							msg: "failed during formula execution: couldn't cr".to_owned()
+								+ &format!("eate script entry number {}", n).to_string(),
+							cause: Box::new(e),
+						})?;
+					write!(entry_file, "{}\n", line).map_err(|e| crate::Error::Catchall {
+						msg: "failed during formula execution: ".to_owned()
+							+ &"io error writing ".to_owned()
+							+ &format!("script entry file {}", n).to_string(),
+						cause: Box::new(Into::<std::io::Error>::into(e)),
+					})?;
+					write!(
+						script_file,
+						". {}\n",
+						Self::container_script_path()
+							.join(entry_file_name)
+							.display()
+					)
+					.map_err(|e| crate::Error::Catchall {
+						msg: "failed during formula execution: ".to_owned()
+							+ &"io error writing ".to_owned()
+							+ &format!("script file entry {}", n).to_string(),
+						cause: Box::new(Into::<std::io::Error>::into(e)),
+					})?;
+				}
+
+				// mount the script into the container
+				mounts.insert(
+					Self::container_script_path().as_os_str().to_owned(),
+					crate::MountSpec::new_bind(&script_dir, &Self::container_script_path(), false),
+				);
+
+				vec![
+					a.interpreter.to_owned(),
+					Self::container_script_path()
+						.join("run")
+						.display()
+						.to_string(),
+				]
+			}
+		};
+
 		let params = crate::ContainerParams {
-			action: match formula_and_context.formula {
-				formula::FormulaCapsule::V1(f) => f.action,
-			},
-			mounts: {
-				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
-				IndexMap::new()
-				// todo: more initializer here
-			},
+			command: command,
+			mounts: mounts,
 			root_path: "/tmp/rootfs".to_string(),
 		};
 		match self {
@@ -43,7 +134,7 @@ mod tests {
 
 	#[tokio::main]
 	#[test]
-	async fn formula_runc_it_works() {
+	async fn formula_exec_runc_it_works() {
 		let formula_and_context: warpforge_api::formula::FormulaAndContext =
 			serde_json::from_str(
 				r#"
@@ -86,15 +177,93 @@ mod tests {
 		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
 			while let Some(evt) = gather_chan_recv.recv().await {
-				match evt.body {
-					crate::events::EventBody::Output { .. } => {}
+				match &evt.body {
+					crate::events::EventBody::Output { channel, val } => {
+						assert_eq!(channel, &1);
+						assert_eq!(val, "hello from warpforge!");
+					}
 					crate::events::EventBody::ExitCode(code) => {
-						assert_eq!(code, Some(0));
+						assert_eq!(code, &Some(0));
+						//return; // stop processing events (this breaks it?)
+					}
+				};
+				println!("event! {:?}", evt);
+			}
+		});
+
+		executor
+			.run(formula_and_context, gather_chan)
+			.await
+			.expect("it didn't fail");
+		gather_handle.await.expect("gathering events failed");
+	}
+
+	#[tokio::main]
+	#[test]
+	async fn formula_script_runc_it_works() {
+		let formula_and_context: warpforge_api::formula::FormulaAndContext =
+			serde_json::from_str(
+				r#"
+{
+	"formula": {
+		"formula.v1": {
+			"inputs": {
+				"/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
+			},
+			"action": {
+				"script": {
+					"interpreter": "/bin/sh",
+					"contents": [
+						"MESSAGE='hello, this is a script action'",
+						"echo $MESSAGE"
+					]
+				}
+			},
+			"outputs": {
+				"test": {
+					"from": "/out",
+					"packtype": "tar"
+				}
+			}
+		}
+	},
+	"context": {
+		"context.v1": {
+			"warehouses": {
+				"tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9": "https://warpsys.s3.amazonaws.com/warehouse/4z9/DCT/4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
+			}
+		}
+	}
+}
+"#,
+			).expect("failed to parse formula json");
+
+		let cfg = crate::runc::Executor {
+			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
+			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
+		};
+		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
+
+		let executor = Formula::Runc(cfg);
+
+		// empty gather_chan
+		let gather_handle = tokio::spawn(async move {
+			let mut output_was_sent = false; // gross but i can't think of a better way
+			while let Some(evt) = gather_chan_recv.recv().await {
+				match &evt.body {
+					crate::events::EventBody::Output { channel, val } => {
+						assert_eq!(channel, &1);
+						assert_eq!(val, "hello, this is a script action");
+						output_was_sent = true;
+					}
+					crate::events::EventBody::ExitCode(code) => {
+						assert_eq!(code, &Some(0));
 						//return; // stop processing events
 					}
 				};
 				println!("event! {:?}", evt);
 			}
+			assert_eq!(output_was_sent, true);
 		});
 
 		executor

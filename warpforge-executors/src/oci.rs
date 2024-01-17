@@ -6,12 +6,12 @@ pub trait ToOCIMount {
 
 impl ToOCIMount for crate::MountSpec {
 	fn to_oci_mount(&self) -> serde_json::Value {
-		json!([		{
-			"destination": self.destination,
-			"type": self.kind,
-			"source": self.source,
-			"options": self.options,
-		}])
+		json!({
+			"destination": self.destination.to_str(),
+			"type": self.kind.to_str(),
+			"source": self.source.to_str(),
+			"options": self.options.iter().map(|v| {v.to_str()}).collect::<Vec<_>>(),
+		})
 	}
 }
 

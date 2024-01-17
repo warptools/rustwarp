@@ -60,20 +60,9 @@ impl Executor {
 			}
 		};
 
-		use warpforge_api::formula::Action;
-
-		let args: Vec<String> = match &task.action {
-			Action::Echo => vec![
-				"echo".to_string(),
-				"what is the \"Echo\" Action for?".to_string(),
-			]
-			.to_owned(),
-			Action::Execute(a) => a.command.to_owned(),
-			Action::Script(a) => vec![a.interpreter.to_owned()],
-		};
 		// todo: apply mutations here.
 		let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
-			{ "op": "add", "path": "/process/args", "value": args },
+			{ "op": "add", "path": "/process/args", "value": task.command },
 			{ "op": "replace", "path": "/root/path", "value": task.root_path }, // FIXME: time to get the rest of the supply chain implemented :D
 			{ "op": "add", "path": "/linux/uidMappings", "value":
 			   [{"containerID": 0, "hostID": uid, "size": 1}]},
@@ -235,12 +224,12 @@ mod tests {
 			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
-		use warpforge_api::formula;
 		let params = crate::ContainerParams {
-			action: formula::Action::Execute(formula::ActionExecute {
-				command: vec!["/bin/busybox".to_string(), "--help".to_string()],
-				network: None,
-			}),
+			command: vec![
+				"/bin/sh".to_string(),
+				"-c".to_string(),
+				"it works!".to_string(),
+			],
 			mounts: {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
 				IndexMap::new()

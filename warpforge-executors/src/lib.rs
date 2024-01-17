@@ -21,9 +21,7 @@ pub use events::Event;
 /// So, no more WareIDs down here.  Ware manifestation must have already happened, etc.
 /// Generating any tempdirs for overlayFSes also should've happened already.
 pub struct ContainerParams {
-	// TODO
-	// Probably the wfapi::Action structure just comes straight through; don't see why not.
-	action: warpforge_api::formula::Action,
+	command: Vec<String>,
 	/// Mounts, mapped by destination.
 	mounts: IndexMap<OsString, MountSpec>,
 	root_path: String,
@@ -73,6 +71,19 @@ impl MountSpec {
 				os_str_cat!("upperdir=", upperdir),
 				os_str_cat!("workdir=", workdir),
 			],
+		};
+	}
+
+	pub fn new_bind(path: &Path, dest: &Path, read_only: bool) -> Self {
+		let mut options: Vec<OsString> = vec!["rbind".into()];
+		if read_only {
+			options.push("ro".into())
+		};
+		return MountSpec {
+			destination: dest.as_os_str().to_owned(),
+			kind: OsString::from("none"),
+			source: path.as_os_str().to_owned(),
+			options: options,
 		};
 	}
 }

@@ -120,10 +120,12 @@ impl GvisorExecutor {
 		let mut child = cmd.spawn().map_err(|e| {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {
-				std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
-					msg,
-					cause: Box::new(e),
-				},
+				std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied => {
+					crate::Error::SystemSetupError {
+						msg,
+						cause: Box::new(e),
+					}
+				}
 				_ => crate::Error::SystemRuntimeError {
 					msg,
 					cause: Box::new(e),
@@ -192,7 +194,7 @@ mod tests {
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel(32);
 		let params = crate::ContainerParams {
-			action: warpforge_api::formula::Action::Echo,
+			command: vec!["/bin/sh -c \"echo it works!\"".to_string()],
 			mounts: {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
 				IndexMap::new()
