@@ -111,7 +111,21 @@ impl Formula {
 			//TODO implement the FormulaInputComplex filter thing
 			match port.get(..1) {
 				// TODO replace this with a catverter macro
-				Some("$") => {}
+				Some("$") => {
+					environment.insert(
+						port.get(1..)
+							.expect("environment variable with empty name")
+							.into(),
+						match input {
+							warpforge_api::plot::PlotInput::Literal(l) => l,
+							_ => panic!(
+								"input environment variable value {}",
+								"contains invalid discriminant"
+							),
+						}
+						.into(),
+					);
+				}
 				Some("/") => {}
 				None | _ => {}
 			}
@@ -162,7 +176,7 @@ mod tests {
     "formula.v1": {
       "inputs": {
         "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9",
-        "$MSG": "hello from warpforge!"
+        "$MSG": "literal:hello from warpforge!"
       },
       "action": {
         "exec": {
