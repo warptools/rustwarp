@@ -83,6 +83,15 @@ impl Executor {
 			json_patch::patch(&mut spec, &p).unwrap();
 		}
 
+		// add environment variables
+		for (var, val) in task.environment.iter() {
+			let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
+				{ "op": "add", "path": "/process/env/-", "value": os_str_cat!(var, "=", val).to_str()}
+			]))
+			.unwrap();
+			json_patch::patch(&mut spec, &p).unwrap();
+		}
+
 		// Write it out.
 		let cfg_dir = self.ersatz_dir.join(ident);
 		fs::create_dir_all(&cfg_dir).map_err(|e| {
@@ -211,9 +220,8 @@ impl Executor {
 
 #[cfg(test)]
 mod tests {
-	use std::path::Path;
-
 	use indexmap::IndexMap;
+	use std::path::Path;
 	use tokio::sync::mpsc;
 
 	#[tokio::main]
@@ -228,7 +236,7 @@ mod tests {
 			command: vec![
 				"/bin/sh".to_string(),
 				"-c".to_string(),
-				"it works!".to_string(),
+				"echo $MSG".to_string(),
 			],
 			mounts: {
 				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
@@ -236,6 +244,11 @@ mod tests {
 				// todo: more initializer here
 			},
 			root_path: "/tmp/rootfs".to_string(),
+
+			environment: IndexMap::from([
+				("MSG".into(), "hello, from environment variables!".into()),
+				("VAR".into(), "test".into()),
+			]),
 		};
 
 		// empty gather_chan

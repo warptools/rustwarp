@@ -101,12 +101,24 @@ impl Formula {
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
 		let mut mounts = IndexMap::new();
-
-		use warpforge_api::formula::Action;
-		let action = match formula_and_context.formula {
-			formula::FormulaCapsule::V1(formula::Formula { action, .. }) => action,
+		let mut environment = IndexMap::new();
+		let formula = match formula_and_context.formula {
+			formula::FormulaCapsule::V1(f) => f,
 		};
-		let command: Vec<String> = match &action {
+
+		// Handle Inputs
+		for (formula::SandboxPort(port), input) in formula.inputs {
+			//TODO implement the FormulaInputComplex filter thing
+			match port.get(..1) {
+				// TODO replace this with a catverter macro
+				Some("$") => {}
+				Some("/") => {}
+				None | _ => {}
+			}
+		}
+		// Handle Actions
+		use warpforge_api::formula::Action;
+		let command: Vec<String> = match &formula.action {
 			Action::Echo => vec![
 				"echo".to_string(),
 				"what is the \"Echo\" Action for?".to_string(),
@@ -117,14 +129,15 @@ impl Formula {
 		};
 
 		let params = crate::ContainerParams {
-			command: command,
-			mounts: mounts,
+			command,
+			mounts,
+			environment,
 			root_path: "/tmp/rootfs".to_string(),
 		};
 		match self {
 			Formula::Runc(e) => e.run(&params, outbox).await,
 			/*Formula::Gvisor(_e) => Err(crate::Error::CatchallCauseless {
-				msg: "gvisor exector not implemented".to_string(),
+				msg: "gvisor executor not implemented".to_string(),
 			}),*/
 		}
 	}
@@ -148,14 +161,15 @@ mod tests {
   "formula": {
     "formula.v1": {
       "inputs": {
-        "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
+        "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9",
+        "$MSG": "hello from warpforge!"
       },
       "action": {
         "exec": {
           "command": [
             "/bin/sh",
             "-c",
-            "echo hello from warpforge!"
+            "echo $MSG"
           ]
         }
       },
@@ -245,8 +259,8 @@ mod tests {
 			).expect("failed to parse formula json");
 
 		let cfg = crate::runc::Executor {
-			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
-			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
+			ersatz_dir: Path::new("/tmp/warpforge-test-formula-executor-runc/run").to_owned(),
+			log_file: Path::new("/tmp/warpforge-test-formula-executor-runc/log").to_owned(),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 

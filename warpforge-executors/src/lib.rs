@@ -24,6 +24,7 @@ pub struct ContainerParams {
 	command: Vec<String>,
 	/// Mounts, mapped by destination.
 	mounts: IndexMap<OsString, MountSpec>,
+	environment: IndexMap<OsString, OsString>,
 	root_path: String,
 }
 

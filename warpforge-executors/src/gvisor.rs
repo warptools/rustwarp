@@ -200,6 +200,7 @@ mod tests {
 				IndexMap::new()
 				// todo: more initializer here
 			},
+			environment: IndexMap::new(),
 			root_path: "/tmp/rustwarp-rootfs/".to_string(),
 		};
 		// We let this greenthread sail off into the dark.
