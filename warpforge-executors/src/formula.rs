@@ -1,5 +1,7 @@
+use indexmap::IndexMap;
 use std::io::Write;
 use std::path::PathBuf;
+use warpforge_api::formula;
 
 #[allow(dead_code)]
 pub enum Formula {
@@ -14,19 +16,91 @@ impl Formula {
 		PathBuf::from(Self::CONTAINER_BASE_PATH).join("script")
 	}
 
+	pub fn setup_script(
+		&self,
+		a: &warpforge_api::formula::ActionScript,
+		mounts: &mut indexmap::IndexMap<std::ffi::OsString, crate::MountSpec>,
+	) -> Result<Vec<std::string::String>, crate::Error> {
+		let ersatz_dir = match self {
+			self::Formula::Runc(crate::runc::Executor { ersatz_dir, .. }) => ersatz_dir,
+		};
+
+		let script_dir = ersatz_dir.join("script");
+		use std::fs;
+		fs::create_dir_all(&script_dir).map_err(|e| {
+			let msg = "failed during formula execution: couldn't create script dir".to_owned();
+			match e.kind() {
+				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+					msg,
+					cause: Box::new(e),
+				},
+				_ => crate::Error::SystemRuntimeError {
+					msg,
+					cause: Box::new(e),
+				},
+			}
+		})?;
+
+		let mut script_file =
+			fs::File::create(script_dir.join("run")).map_err(|e| crate::Error::Catchall {
+				msg: "failed during formula execution:".to_owned()
+					+ &" couldn't open script file for writing".to_owned(),
+				cause: Box::new(e),
+			})?;
+
+		for (n, line) in a.contents.iter().enumerate() {
+			let entry_file_name = format!("entry-{}", n);
+			let mut entry_file =
+				fs::File::create(script_dir.join(&entry_file_name)).map_err(|e| {
+					crate::Error::Catchall {
+						msg: "failed during formula execution: couldn't cr".to_owned()
+							+ &format!("eate script entry number {}", n).to_string(),
+						cause: Box::new(e),
+					}
+				})?;
+			write!(entry_file, "{}\n", line).map_err(|e| crate::Error::Catchall {
+				msg: "failed during formula execution: ".to_owned()
+					+ &"io error writing ".to_owned()
+					+ &format!("script entry file {}", n).to_string(),
+				cause: Box::new(Into::<std::io::Error>::into(e)),
+			})?;
+			write!(
+				script_file,
+				". {}\n",
+				Self::container_script_path()
+					.join(entry_file_name)
+					.display()
+			)
+			.map_err(|e| crate::Error::Catchall {
+				msg: "failed during formula execution: ".to_owned()
+					+ &"io error writing ".to_owned()
+					+ &format!("script file entry {}", n).to_string(),
+				cause: Box::new(Into::<std::io::Error>::into(e)),
+			})?;
+		}
+
+		// mount the script into the container
+		mounts.insert(
+			Self::container_script_path().as_os_str().to_owned(),
+			crate::MountSpec::new_bind(&script_dir, &Self::container_script_path(), false),
+		);
+
+		Ok(vec![
+			a.interpreter.to_owned(),
+			Self::container_script_path()
+				.join("run")
+				.display()
+				.to_string(),
+		])
+	}
+
 	#[allow(dead_code)]
 	pub async fn run(
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
-		use indexmap::IndexMap;
-		use warpforge_api::formula;
-
 		let mut mounts = IndexMap::new();
-		let ersatz_dir = match self {
-			self::Formula::Runc(crate::runc::Executor { ersatz_dir, .. }) => ersatz_dir,
-		};
 
 		use warpforge_api::formula::Action;
 		let action = match formula_and_context.formula {
@@ -39,75 +113,7 @@ impl Formula {
 			]
 			.to_owned(),
 			Action::Execute(a) => a.command.to_owned(),
-			Action::Script(a) => {
-				let script_dir = ersatz_dir.join("script");
-				use std::fs;
-				fs::create_dir_all(&script_dir).map_err(|e| {
-					let msg =
-						"failed during formula execution: couldn't create script dir".to_owned();
-					match e.kind() {
-						std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
-							msg,
-							cause: Box::new(e),
-						},
-						_ => crate::Error::SystemRuntimeError {
-							msg,
-							cause: Box::new(e),
-						},
-					}
-				})?;
-
-				let mut script_file = fs::File::create(script_dir.join("run")).map_err(|e| {
-					crate::Error::Catchall {
-						msg: "failed during formula execution:".to_owned()
-							+ &" couldn't open script file for writing".to_owned(),
-						cause: Box::new(e),
-					}
-				})?;
-
-				for (n, line) in a.contents.iter().enumerate() {
-					let entry_file_name = format!("entry-{}", n);
-					let mut entry_file = fs::File::create(script_dir.join(&entry_file_name))
-						.map_err(|e| crate::Error::Catchall {
-							msg: "failed during formula execution: couldn't cr".to_owned()
-								+ &format!("eate script entry number {}", n).to_string(),
-							cause: Box::new(e),
-						})?;
-					write!(entry_file, "{}\n", line).map_err(|e| crate::Error::Catchall {
-						msg: "failed during formula execution: ".to_owned()
-							+ &"io error writing ".to_owned()
-							+ &format!("script entry file {}", n).to_string(),
-						cause: Box::new(Into::<std::io::Error>::into(e)),
-					})?;
-					write!(
-						script_file,
-						". {}\n",
-						Self::container_script_path()
-							.join(entry_file_name)
-							.display()
-					)
-					.map_err(|e| crate::Error::Catchall {
-						msg: "failed during formula execution: ".to_owned()
-							+ &"io error writing ".to_owned()
-							+ &format!("script file entry {}", n).to_string(),
-						cause: Box::new(Into::<std::io::Error>::into(e)),
-					})?;
-				}
-
-				// mount the script into the container
-				mounts.insert(
-					Self::container_script_path().as_os_str().to_owned(),
-					crate::MountSpec::new_bind(&script_dir, &Self::container_script_path(), false),
-				);
-
-				vec![
-					a.interpreter.to_owned(),
-					Self::container_script_path()
-						.join("run")
-						.display()
-						.to_string(),
-				]
-			}
+			Action::Script(a) => self.setup_script(a, &mut mounts)?,
 		};
 
 		let params = crate::ContainerParams {
