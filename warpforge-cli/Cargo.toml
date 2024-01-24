@@ -10,4 +10,4 @@ warpforge-visualize = { path = "../warpforge-visualize" }
 clap = { version = "4.3.0", features = ["derive"] }
 serde = { version = "1" }
 serde_json = { version = "1" }
-thiserror = "*"
+thiserror.workspace = true

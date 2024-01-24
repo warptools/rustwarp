@@ -104,8 +104,13 @@ fn main2() -> Result<(), Error> {
 	}
 }
 
-#[test]
-fn verify_cli() {
-	use clap::CommandFactory;
-	cmds::Root::command().debug_assert()
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn verify_cli() {
+		use clap::CommandFactory;
+		cmds::Root::command().debug_assert()
+	}
 }

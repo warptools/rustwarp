@@ -3,8 +3,9 @@ resolver = "2"
 members = [
   "warpforge-api",
   "warpforge-cli",
-  "warpforge-visualize",
   "warpforge-executors",
+  "warpforge-terminal",
+  "warpforge-visualize",
   "catverters",
   "catverters-derive",
   "testfiles-derive",
@@ -15,8 +16,9 @@ edition = "2021"
 
 [workspace.dependencies]
 thiserror = "*"
-tokio = { version = "*", features = ["macros", "rt", "rt-multi-thread", "io-util", "process", "sync"] }
+tokio = { version = "*", features = ["macros", "rt", "rt-multi-thread", "io-util", "process", "sync", "time"] }
 indexmap = { version = "*", features = ["serde"] }
+serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*", features = ["preserve_order"] }
 str-cat = "*"
 json-patch = "*"

@@ -8,14 +8,14 @@ catverters = { path = "../catverters" }
 catverters-derive = { path = "../catverters-derive" }
 
 indexmap.workspace = true
-serde = { version = "*", features = ["derive"] }
+serde.workspace = true
 serde_with = "*"
 derive_more = "*"
 
 [dev-dependencies]
 testfiles-derive = { path = "../testfiles-derive" }
 
-serde_json = { version = "*", features = ["preserve_order"] }
+serde_json.workspace = true
 memchr = "*"
 indoc = "*"
 expect-test.workspace = true
