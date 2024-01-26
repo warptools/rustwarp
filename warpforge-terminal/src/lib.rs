@@ -1,7 +1,12 @@
+pub mod client;
 mod errors;
 mod render;
+mod server;
+
+use std::io;
 
 use serde::{Deserialize, Serialize};
+use server::Server;
 use tokio::sync::mpsc::{self, Sender};
 
 pub use crate::errors::Error;
@@ -29,6 +34,12 @@ impl Logger {
 		let (sender, receiver) = mpsc::channel(32);
 		TerminalRenderer::start(receiver);
 		Self { channel: sender }
+	}
+
+	pub async fn new_server(port: u16) -> std::result::Result<Self, io::Error> {
+		let (sender, receiver) = mpsc::channel(32);
+		Server::new(receiver).start(port).await?;
+		Ok(Self { channel: sender })
 	}
 
 	pub async fn log(&self, message: impl Into<String>) -> Result<()> {
