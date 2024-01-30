@@ -18,7 +18,7 @@ pub struct Logger {
 	channel: Sender<Message>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub(crate) enum Message {
 	Log(String),
 	SetUpper(String),
