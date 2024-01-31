@@ -10,7 +10,7 @@ use server::Server;
 use tokio::sync::mpsc::{self, Sender};
 
 pub use crate::errors::Error;
-use crate::errors::Result;
+pub use crate::errors::Result;
 use crate::render::TerminalRenderer;
 
 #[derive(Clone)]
@@ -44,6 +44,30 @@ impl Logger {
 
 	pub async fn log(&self, message: impl Into<String>) -> Result<()> {
 		self.send(Message::Log(message.into())).await
+	}
+
+	pub async fn set_upper(&self, name: impl Into<String>) -> Result<()> {
+		self.send(Message::SetUpper(name.into())).await
+	}
+
+	pub async fn set_lower(&self, name: impl Into<String>) -> Result<()> {
+		self.send(Message::SetLower(name.into())).await
+	}
+
+	pub async fn set_upper_position(&self, position: u64) -> Result<()> {
+		self.send(Message::SetUpperPosition(position)).await
+	}
+
+	pub async fn set_lower_position(&self, position: u64) -> Result<()> {
+		self.send(Message::SetLowerPosition(position)).await
+	}
+
+	pub async fn set_upper_max(&self, max: u64) -> Result<()> {
+		self.send(Message::SetUpperMax(max)).await
+	}
+
+	pub async fn set_lower_max(&self, max: u64) -> Result<()> {
+		self.send(Message::SetLowerMax(max)).await
 	}
 
 	async fn send(&self, message: Message) -> Result<()> {
