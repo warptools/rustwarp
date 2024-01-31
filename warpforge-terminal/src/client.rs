@@ -5,6 +5,7 @@ use tokio::{
 	net::{TcpStream, ToSocketAddrs},
 	sync::mpsc::{self, Sender},
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{render::TerminalRenderer, Message};
 
@@ -12,19 +13,22 @@ const BUFFER_SIZE: usize = 4096;
 const BUFFER_MIN_READ_SIZE: usize = 1024;
 const BUFFER_MAX_SIZE: usize = 65536;
 
-pub async fn render_remote_logs(address: impl ToSocketAddrs) -> Result<(), io::Error> {
+pub async fn render_remote_logs(
+	address: impl ToSocketAddrs,
+) -> Result<CancellationToken, io::Error> {
 	let connection = TcpStream::connect(address).await?;
 	let (sender, receiver) = mpsc::channel(32);
 	TerminalRenderer::start(receiver);
-	start_client(sender, connection);
-
-	Ok(())
+	Ok(start_client(sender, connection))
 }
 
-fn start_client<R>(channel: Sender<Message>, mut reader: R)
+fn start_client<R>(channel: Sender<Message>, mut reader: R) -> CancellationToken
 where
 	R: AsyncRead + Unpin + Send + 'static,
 {
+	let token = CancellationToken::new();
+	let cloned_token = token.clone();
+
 	tokio::spawn(async move {
 		let mut buffer = Vec::with_capacity(BUFFER_SIZE);
 		let mut size = 0;
@@ -40,7 +44,14 @@ where
 				return;
 			}
 
-			let n = match reader.read_buf(&mut buffer).await {
+			let result = tokio::select! {
+				result = reader.read_buf(&mut buffer) => result,
+				_ = token.cancelled() => {
+					return; // graceful shutdown
+				}
+			};
+
+			let n = match result {
 				Ok(0) => {
 					eprintln!("server closed connection");
 					return;
@@ -67,7 +78,7 @@ where
 					let result = channel.send(message).await;
 					if result.is_err() {
 						eprintln!("terminal renderer closed channel unexpectedly");
-						// TODO: explain graceful shutdown of client
+						eprintln!("use the cancellation token to shutdown the client gracefully");
 						return;
 					}
 				}
@@ -80,10 +91,14 @@ where
 			}
 		}
 	});
+
+	cloned_token
 }
 
 #[cfg(test)]
 mod tests {
+	use std::time::Duration;
+
 	use tokio_test::io::Builder;
 
 	use super::*;
@@ -162,6 +177,22 @@ mod tests {
 		let (sender, mut receiver) = mpsc::channel(1);
 		start_client(sender, reader);
 
+		assert_eq!(None, receiver.recv().await);
+	}
+
+	#[tokio::test]
+	async fn graceful_shutdown() {
+		let message = Message::Log("hi".to_string());
+		let reader = Builder::new()
+			.wait(Duration::from_secs(5))
+			.read_message(&message)
+			.build();
+		let (sender, mut receiver) = mpsc::channel(1);
+		let token = start_client(sender, reader);
+		token.cancel();
+
+		// If the graceful shutdown does not work, the client will wait for the
+		// given duration and then receive `Some(message)` (instead of None).
 		assert_eq!(None, receiver.recv().await);
 	}
 }
