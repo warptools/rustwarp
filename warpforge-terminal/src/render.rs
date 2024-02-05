@@ -7,6 +7,7 @@ use crate::Message;
 
 pub(crate) struct TerminalRenderer {
 	multi_progress: MultiProgress,
+	_prompt: ProgressBar,
 	upper_bar: ProgressBar,
 	lower_bar: ProgressBar,
 
@@ -17,7 +18,7 @@ impl TerminalRenderer {
 	pub(crate) fn start(channel: Receiver<Message>) {
 		let multi_progress = MultiProgress::new();
 
-		multi_progress.add(
+		let prompt = multi_progress.add(
 			ProgressBar::new(1)
 				.with_style(
 					ProgressStyle::with_template("{prefix:.green} {msg}")
@@ -26,6 +27,7 @@ impl TerminalRenderer {
 				.with_prefix("$")
 				.with_message(args().collect::<Vec<_>>().join(" ")),
 		);
+		prompt.tick();
 
 		let style = ProgressStyle::with_template(
 			"[{elapsed_precise}] [{bar:30.green}] {pos:>3}/{len:3} {msg}",
@@ -39,6 +41,7 @@ impl TerminalRenderer {
 		tokio::spawn(async move {
 			Self {
 				multi_progress,
+				_prompt: prompt,
 				upper_bar,
 				lower_bar,
 				channel,
