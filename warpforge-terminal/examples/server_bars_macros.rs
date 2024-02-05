@@ -18,17 +18,18 @@ async fn main() -> Result<()> {
 	logger.set_lower_max(TASKS).await?;
 	for (m, &module) in modules.iter().enumerate() {
 		logger.set_upper(module).await?;
-		logger.set_upper_position(m as u64 + 1).await?;
 		logln!("Start work on module '{module}'...");
 
 		for task in 0..TASKS {
 			logger.set_lower(format!("task{}", task)).await?;
-			logger.set_lower_position(task + 1).await?;
+			logger.set_lower_position(task).await?;
 			sleep(Duration::from_secs(1)).await;
 			logln!("Finished task 'task{task}'");
 		}
 
 		logln!("Finished module '{module}'");
+		logger.set_lower_position(TASKS).await?;
+		logger.set_upper_position(m as u64 + 1).await?;
 	}
 
 	sleep(Duration::from_secs(3)).await;
