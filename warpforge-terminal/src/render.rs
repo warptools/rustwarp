@@ -1,7 +1,7 @@
-use std::env::args;
+use std::{env::args, time::Duration};
 
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tokio::sync::mpsc::Receiver;
+use tokio::{sync::mpsc::Receiver, time::interval};
 
 use crate::Message;
 
@@ -49,13 +49,32 @@ impl TerminalRenderer {
 	}
 
 	async fn run(mut self) {
+		let mut interval = interval(Duration::from_secs(1));
 		loop {
-			let Some(message) = self.channel.recv().await else { break; };
+			let message = tokio::select! {
+				message = self.channel.recv() => message,
+				_ = interval.tick() => {
+					// Make progress bars redraw at least every second,
+					// so elapsed time is rendered correctly.
+					self.upper_bar.tick();
+					self.lower_bar.tick();
+					continue;
+				}
+			};
+
+			let Some(message) = message else {
+				break; // Stop rendering, after all `Sender` instances have been destroyed.
+			};
 			match message {
 				Message::Log(message) => self.multi_progress.suspend(|| print!("{}", message)),
 				Message::SetUpper(message) => self.upper_bar.set_message(message),
 				Message::SetLower(message) => self.lower_bar.set_message(message),
-				Message::SetUpperPosition(position) => self.upper_bar.set_position(position),
+				Message::SetUpperPosition(position) => {
+					if self.upper_bar.position() != position {
+						self.upper_bar.set_position(position);
+						self.lower_bar.reset_elapsed();
+					}
+				}
 				Message::SetLowerPosition(position) => self.lower_bar.set_position(position),
 				Message::SetUpperMax(max) => self.upper_bar.set_length(max),
 				Message::SetLowerMax(max) => self.lower_bar.set_length(max),
