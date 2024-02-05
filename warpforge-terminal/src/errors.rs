@@ -5,3 +5,7 @@ pub enum Error {
 	#[error("internal channel error")]
 	ChannelInternal,
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error("global logger has already been set and cannot be redefined")]
+pub struct GlobalLoggerAlreadyDefined;

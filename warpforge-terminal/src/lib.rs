@@ -1,17 +1,24 @@
-pub mod client;
+mod client;
 mod errors;
+mod macros;
 mod render;
 mod server;
 
 use std::io;
+use std::sync::OnceLock;
 
+use errors::GlobalLoggerAlreadyDefined;
 use serde::{Deserialize, Serialize};
 use server::Server;
 use tokio::sync::mpsc::{self, Sender};
 
+pub use crate::client::render_remote_logs;
 pub use crate::errors::Error;
 pub use crate::errors::Result;
+pub use crate::macros::log_global;
 use crate::render::TerminalRenderer;
+
+static LOGGER: OnceLock<Logger> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct Logger {
@@ -40,6 +47,14 @@ impl Logger {
 		let (sender, receiver) = mpsc::channel(32);
 		Server::new(receiver).start(port).await?;
 		Ok(Self { channel: sender })
+	}
+
+	pub fn set_global(logger: Logger) -> std::result::Result<(), GlobalLoggerAlreadyDefined> {
+		LOGGER.set(logger).map_err(|_| GlobalLoggerAlreadyDefined)
+	}
+
+	pub fn get_global() -> Option<&'static Logger> {
+		LOGGER.get()
 	}
 
 	pub async fn log(&self, message: impl Into<String>) -> Result<()> {

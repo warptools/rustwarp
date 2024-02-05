@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 
 use tokio::signal;
-use warpforge_terminal::client::render_remote_logs;
+use warpforge_terminal::render_remote_logs;
 
 #[tokio::main]
 async fn main() {
