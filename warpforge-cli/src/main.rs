@@ -1,6 +1,11 @@
 use clap::Parser;
 use std::env;
 use std::path;
+use std::time::Duration;
+use tokio::time::sleep;
+
+use warpforge_terminal::logln;
+use warpforge_terminal::Logger;
 
 mod cmds;
 mod dab;
@@ -8,22 +13,27 @@ mod errors;
 
 use errors::*;
 
-fn main() {
-	match main2() {
-		Ok(_) => {}
-		Err(e) => {
-			println!("{}", e);
-			std::process::exit(e.code());
-		}
+#[tokio::main]
+async fn main() {
+	Logger::set_global(Logger::new_local()).unwrap();
+
+	if let Err(e) = main2().await {
+		println!("{}", e);
+		std::process::exit(e.code());
 	}
+
+	// FIXME: Find better solution for this.
+	// The problem is that some messages might be omitted from stdout,
+	// if `main` exits before print(s) are executed.
+	sleep(Duration::from_millis(10)).await;
 }
 
-fn main2() -> Result<(), Error> {
+async fn main2() -> Result<(), Error> {
 	let cli =
 		cmds::Root::try_parse().map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 
 	if cli.verbosity >= 2 {
-		println!("args: {:?}", cli);
+		logln!("args: {:?}", cli);
 	}
 
 	// Dispatch.
@@ -50,11 +60,11 @@ fn main2() -> Result<(), Error> {
 
 				match catalog_release.items.get(&cmd.catalog_ref.item_name) {
 					Some(wareid) => {
-						println!("{wareid}");
+						logln!("{wareid}");
 						Ok(())
 					}
 					None => {
-						println!("catalog item not found.");
+						logln!("catalog item not found.");
 						Err(Error::CatalogEntryNotExists {
 							reference: cmd.catalog_ref.clone(),
 						})
@@ -79,7 +89,7 @@ fn main2() -> Result<(), Error> {
 				// TODO implement destination flag
 				// (and be careful cause rio will blow away anything in it's path!!!!!)
 				let args: &Vec<_> = &riocmd.get_args().collect();
-				println!("Running \"rio {:?}\"", args);
+				logln!("Running \"rio {:?}\"", args);
 				let mut child = riocmd
 					.stdout(Stdio::piped())
 					.stderr(Stdio::piped())
@@ -89,7 +99,7 @@ fn main2() -> Result<(), Error> {
 				let mut line = String::new();
 
 				BufRead::read_line(&mut child_out, &mut line).unwrap();
-				println!("{line}");
+				logln!("{line}");
 				Ok(())
 			}
 		},
@@ -98,7 +108,7 @@ fn main2() -> Result<(), Error> {
 			Ok(())
 		}
 		None => {
-			println!("command used with no args.  some explanation text should go here :)");
+			logln!("command used with no args.  some explanation text should go here :)");
 			Ok(())
 		}
 	}

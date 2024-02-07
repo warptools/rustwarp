@@ -1632,7 +1632,9 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
  "warpforge-api",
+ "warpforge-terminal",
  "warpforge-visualize",
 ]
 
