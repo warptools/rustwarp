@@ -75,7 +75,7 @@ where
 					};
 
 					start = i + 1;
-					let result = channel.send(message).await;
+					let result = channel.send(Message::Serializable(message)).await;
 					if result.is_err() {
 						eprintln!("terminal renderer closed channel unexpectedly");
 						eprintln!("use the cancellation token to shutdown the client gracefully");
@@ -102,14 +102,14 @@ mod tests {
 	use tokio_test::io::Builder;
 
 	use super::*;
-	use crate::Message;
+	use crate::{Message, Serializable};
 
 	trait BuilderExtension {
-		fn read_message(&mut self, message: &Message) -> &mut Self;
+		fn read_message(&mut self, message: &Serializable) -> &mut Self;
 	}
 
 	impl BuilderExtension for tokio_test::io::Builder {
-		fn read_message(&mut self, message: &Message) -> &mut Self {
+		fn read_message(&mut self, message: &Serializable) -> &mut Self {
 			let mut bytes = Vec::new();
 			serde_json::to_writer(&mut bytes, message).unwrap();
 			bytes.push(0);
@@ -119,21 +119,21 @@ mod tests {
 
 	#[tokio::test]
 	async fn simple_message() {
-		let message = Message::Log("hi".to_string());
+		let message = Serializable::Log("hi".to_string());
 		let reader = Builder::new().read_message(&message).build();
 		let (sender, mut receiver) = mpsc::channel(1);
 		start_client(sender, reader);
 
-		assert_eq!(Some(message), receiver.recv().await);
+		assert_eq!(Some(Message::Serializable(message)), receiver.recv().await);
 	}
 
 	#[tokio::test]
 	async fn multiple_messages() {
 		let messages = [
-			Message::Log("first".to_string()),
-			Message::SetUpperMax(5),
-			Message::SetUpperPosition(2),
-			Message::Log("last".to_string()),
+			Serializable::Log("first".to_string()),
+			Serializable::SetUpperMax(5),
+			Serializable::SetUpperPosition(2),
+			Serializable::Log("last".to_string()),
 		];
 
 		let mut builder = Builder::new();
@@ -146,13 +146,13 @@ mod tests {
 		start_client(sender, reader);
 
 		for message in messages {
-			assert_eq!(Some(message), receiver.recv().await);
+			assert_eq!(Some(Message::Serializable(message)), receiver.recv().await);
 		}
 	}
 
 	#[tokio::test]
 	async fn exceed_memory_limit() {
-		let message = Message::Log("x".repeat(BUFFER_MAX_SIZE));
+		let message = Serializable::Log("x".repeat(BUFFER_MAX_SIZE));
 		let reader = Builder::new().read_message(&message).build();
 		let (sender, mut receiver) = mpsc::channel(1);
 		start_client(sender, reader);
@@ -162,12 +162,12 @@ mod tests {
 
 	#[tokio::test]
 	async fn server_closed_connection() {
-		let message = Message::Log("hi".to_string());
+		let message = Serializable::Log("hi".to_string());
 		let reader = Builder::new().read_message(&message).build();
 		let (sender, mut receiver) = mpsc::channel(1);
 		start_client(sender, reader);
 
-		assert_eq!(Some(message), receiver.recv().await);
+		assert_eq!(Some(Message::Serializable(message)), receiver.recv().await);
 		assert_eq!(None, receiver.recv().await);
 	}
 
@@ -182,7 +182,7 @@ mod tests {
 
 	#[tokio::test]
 	async fn graceful_shutdown() {
-		let message = Message::Log("hi".to_string());
+		let message = Serializable::Log("hi".to_string());
 		let reader = Builder::new()
 			.wait(Duration::from_secs(5))
 			.read_message(&message)

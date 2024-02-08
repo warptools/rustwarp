@@ -1,8 +1,6 @@
 use clap::Parser;
 use std::env;
 use std::path;
-use std::time::Duration;
-use tokio::time::sleep;
 
 use warpforge_terminal::logln;
 use warpforge_terminal::Logger;
@@ -22,10 +20,8 @@ async fn main() {
 		std::process::exit(e.code());
 	}
 
-	// FIXME: Find better solution for this.
-	// The problem is that some messages might be omitted from stdout,
-	// if `main` exits before print(s) are executed.
-	sleep(Duration::from_millis(10)).await;
+	// Wait for all messages to be printed to stdout.
+	let _ = Logger::get_global().unwrap().close().await;
 }
 
 async fn main2() -> Result<(), Error> {

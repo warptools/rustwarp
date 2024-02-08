@@ -6,7 +6,7 @@ use tokio::{
 	sync::mpsc::Receiver,
 };
 
-use crate::Message;
+use crate::{Message, Serializable};
 
 pub(crate) struct Server {
 	channel: Receiver<Message>,
@@ -30,6 +30,10 @@ impl Server {
 					message = channel.recv() => {
 						let Some(message) = message else {
 							break; // Stop server after all Logger instances got destroyed.
+						};
+
+						let Message::Serializable(message) = message else {
+							continue; // Cannot send non-serializable messages.
 						};
 
 						let bytes = serialize_message(&message);
@@ -70,7 +74,7 @@ impl Server {
 	}
 }
 
-fn serialize_message(message: &Message) -> Vec<u8> {
+fn serialize_message(message: &Serializable) -> Vec<u8> {
 	let mut bytes =
 		serde_json::to_vec(message).expect("[log server] error: failed to serialize message");
 	bytes.push(0);
