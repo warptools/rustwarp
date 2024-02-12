@@ -160,11 +160,11 @@ mod tests {
 	use super::*;
 	use std::path::Path;
 
-	//use expect_test::expect;
+	use serial_test::serial;
 	use tokio::sync::mpsc;
 
-	#[tokio::main]
-	#[test]
+	#[tokio::test]
+	#[serial(rootfs)]
 	async fn formula_exec_runc_it_works() {
 		let formula_and_context: warpforge_api::formula::FormulaAndContext =
 			serde_json::from_str(
@@ -209,6 +209,7 @@ mod tests {
 		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
 			while let Some(evt) = gather_chan_recv.recv().await {
+				println!("event! {:?}", evt);
 				match &evt.body {
 					crate::events::EventBody::Output { channel, val } => {
 						assert_eq!(channel, &1);
@@ -219,7 +220,6 @@ mod tests {
 						//return; // stop processing events (this breaks it?)
 					}
 				};
-				println!("event! {:?}", evt);
 			}
 		});
 
@@ -230,8 +230,8 @@ mod tests {
 		gather_handle.await.expect("gathering events failed");
 	}
 
-	#[tokio::main]
-	#[test]
+	#[tokio::test]
+	#[serial(rootfs)]
 	async fn formula_script_runc_it_works() {
 		let formula_and_context: warpforge_api::formula::FormulaAndContext =
 			serde_json::from_str(
@@ -282,6 +282,7 @@ mod tests {
 		let gather_handle = tokio::spawn(async move {
 			let mut output_was_sent = false; // gross but i can't think of a better way
 			while let Some(evt) = gather_chan_recv.recv().await {
+				println!("event! {:?}", evt);
 				match &evt.body {
 					crate::events::EventBody::Output { channel, val } => {
 						assert_eq!(channel, &1);
@@ -293,7 +294,6 @@ mod tests {
 						//return; // stop processing events
 					}
 				};
-				println!("event! {:?}", evt);
 			}
 			assert!(output_was_sent);
 		});

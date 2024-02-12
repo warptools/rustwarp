@@ -226,13 +226,14 @@ impl Executor {
 #[cfg(test)]
 mod tests {
 	use indexmap::IndexMap;
+	use serial_test::serial;
 	use std::path::Path;
 	use tokio::sync::mpsc;
 
 	use crate::events::EventBody;
 
-	#[tokio::main]
-	#[test]
+	#[tokio::test]
+	#[serial(rootfs)]
 	async fn runc_it_works() {
 		let cfg = crate::runc::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
