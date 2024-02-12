@@ -1,10 +1,11 @@
-use str_cat::os_str_cat;
-use tokio::io::AsyncBufReadExt;
-use tokio::process::Command;
-
 use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
+
+use str_cat::os_str_cat;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio::select;
 
 #[allow(dead_code)] // Public API
 pub struct Executor {
@@ -145,7 +146,7 @@ impl Executor {
 
 		cmd.stdin(Stdio::null());
 		cmd.stdout(Stdio::piped());
-		cmd.stderr(Stdio::inherit());
+		cmd.stderr(Stdio::piped());
 
 		println!("about to spawn cmd with runc");
 		let mut child = cmd.spawn().map_err(|e| {
@@ -171,50 +172,54 @@ impl Executor {
 			.stdout
 			.take()
 			.expect("child did not have a handle to stdout");
+		let stderr = child
+			.stderr
+			.take()
+			.expect("child did not have a handle to stderr");
 
-		let ident2 = ident.to_owned();
-		let outbox2 = outbox.clone();
-		let childwait_handle = tokio::spawn(async move {
-			let status = child
-				.wait()
-				.await
-				.expect("child process encountered an error");
-			// FIXME errors need to go to a channel.
-			println!("child status was: {}", status);
-			outbox2
-				.send(crate::Event {
-					topic: ident2,
-					body: crate::events::EventBody::ExitCode(status.code()),
-				})
-				.await
-				.expect("channel must not be closed");
-		});
+		let mut stdout = BufReader::new(stdout).lines();
+		let mut stderr = BufReader::new(stderr).lines();
 
-		let mut reader = tokio::io::BufReader::new(stdout).lines();
+		loop {
+			select! {
+				line = stdout.next_line() => Self::send_container_output(ident, &outbox, 1, line).await?,
+				line = stderr.next_line() => Self::send_container_output(ident, &outbox, 2, line).await?,
+				status = child.wait() => {
+					let status = status.expect("child process encountered an error");
+					println!("child status was: {}", status);
+					outbox
+						.send(crate::Event {
+							topic: ident.to_owned(),
+							body: crate::events::EventBody::ExitCode(status.code()),
+						})
+						.await
+						.expect("channel must not be closed");
+					break Ok(());
+				}
+			}
+		}
+	}
 
-		while let Some(line) = reader
-			.next_line()
-			.await
-			.map_err(|e| crate::Error::Catchall {
-				msg: "system io error communicating with subprocess during executor run".to_owned(),
-				cause: Box::new(e),
-			})? {
+	async fn send_container_output(
+		ident: &str,
+		outbox: &tokio::sync::mpsc::Sender<crate::Event>,
+		channel: i32,
+		line: Result<Option<String>, std::io::Error>,
+	) -> Result<(), crate::Error> {
+		if let Some(line) = line.map_err(|e| crate::Error::Catchall {
+			msg: "system io error communicating with subprocess during executor run".to_owned(),
+			cause: Box::new(e),
+		})? {
 			outbox
 				.send(crate::Event {
 					topic: ident.to_owned(),
-					body: crate::events::EventBody::Output {
-						channel: 1,
-						val: line,
-					},
+					body: crate::events::EventBody::Output { channel, val: line },
 				})
 				.await
 				.expect("channel must not be closed");
 		}
 
-		childwait_handle.await.map_err(|e| crate::Error::Catchall {
-			msg: "error from child process".to_owned(),
-			cause: Box::new(e),
-		})
+		Ok(())
 	}
 }
 
@@ -223,6 +228,8 @@ mod tests {
 	use indexmap::IndexMap;
 	use std::path::Path;
 	use tokio::sync::mpsc;
+
+	use crate::events::EventBody;
 
 	#[tokio::main]
 	#[test]
@@ -254,14 +261,15 @@ mod tests {
 		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
 			while let Some(evt) = gather_chan_recv.recv().await {
-				match evt.body {
-					crate::events::EventBody::Output { .. } => {}
-					crate::events::EventBody::ExitCode(code) => {
-						assert_eq!(code, Some(0));
+				match &evt.body {
+					EventBody::Output { val, channel: 1 } => println!("[container] {val}"),
+					EventBody::Output { val, channel: 2 } => eprintln!("[container] {val}"),
+					EventBody::Output { .. } => panic!("invalid channel number"),
+					EventBody::ExitCode(code) => {
+						assert_eq!(code, &Some(0));
 						break; // stop processing events
 					}
 				};
-				println!("event! {:?}", evt);
 			}
 		});
 
