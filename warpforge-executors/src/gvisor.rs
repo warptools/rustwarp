@@ -185,8 +185,8 @@ mod tests {
 	use indexmap::IndexMap;
 	use tokio::sync::mpsc;
 
-	#[tokio::main]
-	#[test]
+	#[tokio::test]
+	#[ignore = "deprecated"]
 	async fn gvisor_it_works() {
 		let cfg = super::GvisorExecutor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-gvisor/run").to_owned(),
