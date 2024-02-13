@@ -1,3 +1,4 @@
+use clap::error::ErrorKind;
 use clap::Parser;
 use std::env;
 use std::path;
@@ -16,7 +17,7 @@ async fn main() {
 	Logger::set_global(Logger::new_local()).unwrap();
 
 	if let Err(e) = main2().await {
-		println!("{}", e);
+		logln!("{}", e);
 		std::process::exit(e.code());
 	}
 
@@ -25,11 +26,17 @@ async fn main() {
 }
 
 async fn main2() -> Result<(), Error> {
-	let cli =
-		cmds::Root::try_parse().map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
+	let cli = match cmds::Root::try_parse() {
+		Ok(arguments) => arguments,
+		Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
+			logln!("{e}");
+			return Ok(());
+		}
+		Err(e) => return Err(Error::InvalidArguments { cause: Box::new(e) }),
+	};
 
 	if cli.verbosity >= 2 {
-		logln!("args: {:?}", cli);
+		logln!("args: {cli:?}");
 	}
 
 	// Dispatch.
@@ -38,6 +45,7 @@ async fn main2() -> Result<(), Error> {
 	//   - 1: to receive the command object with all parents.
 	//   - 2: to have a func on my command strugs that receives a call, rather than have to make this dispatch table.
 	match &cli.subcommand {
+		Some(cmds::Subcommands::Run(cmd)) => return cmds::run::execute(&cli, cmd),
 		Some(cmds::Subcommands::Catalog(cmd)) => match &cmd.subcommand {
 			cmds::catalog::Subcommands::ReadItem(cmd) => {
 				let user_home = env::var("HOME")
@@ -57,13 +65,12 @@ async fn main2() -> Result<(), Error> {
 				match catalog_release.items.get(&cmd.catalog_ref.item_name) {
 					Some(wareid) => {
 						logln!("{wareid}");
-						Ok(())
 					}
 					None => {
 						logln!("catalog item not found.");
-						Err(Error::CatalogEntryNotExists {
+						return Err(Error::CatalogEntryNotExists {
 							reference: cmd.catalog_ref.clone(),
-						})
+						});
 					}
 				}
 			}
@@ -96,18 +103,17 @@ async fn main2() -> Result<(), Error> {
 
 				BufRead::read_line(&mut child_out, &mut line).unwrap();
 				logln!("{line}");
-				Ok(())
 			}
 		},
 		Some(cmds::Subcommands::Graph(cmd)) => {
 			warpforge_visualize::graph_dependencies(&cmd.package);
-			Ok(())
 		}
 		None => {
 			logln!("command used with no args.  some explanation text should go here :)");
-			Ok(())
 		}
 	}
+
+	Ok(())
 }
 
 #[cfg(test)]

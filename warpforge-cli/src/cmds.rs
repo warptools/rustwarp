@@ -1,4 +1,5 @@
 pub mod catalog;
+pub mod run;
 pub mod ware;
 
 #[derive(clap::Parser, Debug)]
@@ -7,7 +8,7 @@ pub struct Root {
 	pub subcommand: Option<Subcommands>,
 
 	/// Raise verbosity by specifying this flag repeatedly.
-	#[arg(short, action = clap::ArgAction::Count)]
+	#[arg(short='v', long, action = clap::ArgAction::Count)]
 	pub verbosity: u8,
 }
 
@@ -18,6 +19,9 @@ pub enum Subcommands {
 
 	/// subcommands for working with wares and filesystems -- snapshotting, packing, unpacking, mirroring, etc.
 	Ware(ware::Cmd),
+
+	/// Run a module or formula.
+	Run(run::Cmd),
 
 	/// subcommand to graph dependencies of given package. A dot file is emitted to stdout.
 	Graph(GraphCmd),
