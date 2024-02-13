@@ -81,5 +81,8 @@ macro_rules! logln {
 	// Using two format_args! calls here, to avoid allocation of two String instances.
 	// https://github.com/rust-lang/rust/pull/97658#issuecomment-1530505696
 	// https://github.com/rust-lang/rust/pull/111060
-	($($arg:tt)+) => { $crate::log_global(std::fmt::format(format_args!("{}\n", format_args!($($arg)+)))).await };
+	($($arg:tt)+) => {{
+		let message = std::fmt::format(format_args!("{}\n", format_args!($($arg)+)));
+		$crate::log_global(message).await;
+	}};
 }
