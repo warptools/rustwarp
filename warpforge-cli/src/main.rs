@@ -16,13 +16,17 @@ use errors::*;
 async fn main() {
 	Logger::set_global(Logger::new_local()).unwrap();
 
-	if let Err(e) = main2().await {
+	let result = main2().await;
+	if let Err(e) = &result {
 		logln!("{}", e);
-		std::process::exit(e.code());
 	}
 
 	// Wait for all messages to be printed to stdout.
 	let _ = Logger::get_global().unwrap().close().await;
+
+	if let Err(e) = &result {
+		std::process::exit(e.code());
+	}
 }
 
 async fn main2() -> Result<(), Error> {
@@ -45,7 +49,7 @@ async fn main2() -> Result<(), Error> {
 	//   - 1: to receive the command object with all parents.
 	//   - 2: to have a func on my command strugs that receives a call, rather than have to make this dispatch table.
 	match &cli.subcommand {
-		Some(cmds::Subcommands::Run(cmd)) => return cmds::run::execute(&cli, cmd),
+		Some(cmds::Subcommands::Run(cmd)) => return cmds::run::execute(&cli, cmd).await,
 		Some(cmds::Subcommands::Catalog(cmd)) => match &cmd.subcommand {
 			cmds::catalog::Subcommands::ReadItem(cmd) => {
 				let user_home = env::var("HOME")

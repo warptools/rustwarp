@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 warpforge-api = { path = "../warpforge-api" }
+warpforge-executors = { path = "../warpforge-executors" }
 warpforge-terminal = { path = "../warpforge-terminal" }
 warpforge-visualize = { path = "../warpforge-visualize" }
 

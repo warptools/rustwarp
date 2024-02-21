@@ -41,6 +41,10 @@ pub enum Error {
 	/// Probably contains a filesystem IO error or similar.
 	#[error("error accessing catalog: {cause}")]
 	CatalogAccessError { cause: ErrorCause },
+
+	// Transparent wrapper for executor errors.
+	#[error(transparent)]
+	Executor(#[from] warpforge_executors::Error),
 }
 
 impl Error {
@@ -51,6 +55,7 @@ impl Error {
 			Error::MissingPlugin { .. } => 7,
 			Error::CatalogEntryNotExists { .. } => 14,
 			Error::CatalogAccessError { .. } => 15,
+			Error::Executor(..) => 16,
 		}
 	}
 }

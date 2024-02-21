@@ -1746,6 +1746,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "warpforge-api",
+ "warpforge-executors",
  "warpforge-terminal",
  "warpforge-visualize",
 ]
@@ -1764,6 +1765,7 @@ dependencies = [
  "thiserror",
  "tokio",
  "warpforge-api",
+ "warpforge-terminal",
 ]
 
 [[package]]
