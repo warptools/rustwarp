@@ -53,7 +53,7 @@ pub struct Logger {
 }
 
 #[derive(Debug)]
-pub(crate) enum Message {
+pub enum Message {
 	Serializable(Serializable),
 
 	/// Closes the local renderer, if it exists which sends a notification over the given
@@ -63,7 +63,7 @@ pub(crate) enum Message {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub(crate) enum Serializable {
+pub enum Serializable {
 	Log(String),
 	SetUpper(String),
 	SetLower(String),
@@ -157,6 +157,6 @@ impl Logger {
 		self.channel
 			.send(message)
 			.await
-			.map_err(|_| Error::ChannelInternal)
+			.map_err(|e| Error::ChannelInternal { input: e.0 })
 	}
 }

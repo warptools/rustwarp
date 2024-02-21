@@ -1,18 +1,22 @@
-use crate::Logger;
+use crate::{Error, Logger, Message, Serializable};
 
 /// Helper function for [`log!`] and [`logln`] macros.
 ///
 /// # Panics
 ///
-/// Panics if no global logger is defined or
-/// the global logger has already been closed.
+/// Panics on unexpected errors. Panic was unreachable when writing this comment.
 pub async fn log_global(message: impl Into<String>) {
-	let logger = Logger::get_global()
-		.expect("log!() and logln!() macros require a global logger (see `Logger::set_global`)");
-	logger
-		.log(message.into())
-		.await
-		.expect("log!() or logln!() macro was used, but global logger already terminated");
+	if let Some(logger) = Logger::get_global() {
+		match logger.log(message.into()).await {
+			Ok(_) => {}
+			Err(Error::ChannelInternal {
+				input: Message::Serializable(Serializable::Log(message)),
+			}) => print!("{}", message),
+			Err(e) => panic!("log!() or logln!() failed unexpectedly: {e}"),
+		}
+	} else {
+		print!("{}", message.into());
+	}
 }
 
 /// Sends a message to the global logger.
@@ -22,9 +26,7 @@ pub async fn log_global(message: impl Into<String>) {
 ///
 /// # Panics
 ///
-/// Panics if no global logger is defined. (See [`crate::Logger::set_global`])
-///
-/// Writing after the global logger is closed will lead this macro to panic.
+/// Panics on unexpected errors. Panic was unreachable when writing this comment.
 ///
 /// # Examples
 ///
@@ -53,11 +55,13 @@ macro_rules! log {
 ///
 /// This macro uses the same syntax as [`format!`].
 ///
+/// The message is directly written to stdout using [`print!`] if
+/// * the global logger was not setup correctly
+/// * the global logger was already closed again
+///
 /// # Panics
 ///
-/// Panics if no global logger is defined. (See [`crate::Logger::set_global`])
-///
-/// Writing after the global logger is closed will lead this macro to panic.
+/// Panics on unexpected errors. Panic was unreachable when writing this comment.
 ///
 /// # Examples
 ///
