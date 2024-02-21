@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 warpforge-api = { path = "../warpforge-api" }
+warpforge-terminal = { path = "../warpforge-terminal" }
 
 thiserror.workspace = true
 tokio.workspace = true

@@ -1,12 +1,52 @@
 use indexmap::IndexMap;
-use std::io::Write;
 use std::path::PathBuf;
-use warpforge_api::formula;
+use std::{env::temp_dir, io::Write};
+use tokio::sync::mpsc;
+use warpforge_api::formula::{self, FormulaAndContext};
+use warpforge_terminal::logln;
 
-#[allow(dead_code)]
+use crate::events::EventBody;
+use crate::{runc, Error, Event};
+
 pub enum Formula {
-	Runc(crate::runc::Executor),
+	Runc(runc::Executor),
 	//Gvisor(crate::gvisor::GvisorExecutor),
+}
+
+pub async fn run_formula(formula: FormulaAndContext) -> Result<(), Error> {
+	let temporary_path = temp_dir();
+
+	let executor = Formula::Runc(runc::Executor {
+		ersatz_dir: temporary_path.join("run"),
+		log_file: temporary_path.join("log"),
+	});
+
+	let (event_sender, mut event_receiver) = mpsc::channel::<Event>(32);
+
+	let event_handler = tokio::spawn(async move {
+		while let Some(event) = event_receiver.recv().await {
+			match &event.body {
+				EventBody::Output { val, .. } => logln!("[runc] {val}\n"),
+				EventBody::ExitCode(code) => return *code,
+			}
+		}
+
+		None
+	});
+
+	executor.run(formula, event_sender).await?;
+
+	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
+		msg: "unexpected error while running runc".into(),
+		cause: Box::new(e),
+	})?;
+	match exit_code {
+		Some(0) => Ok(()),
+		_ => Err(Error::SystemRuntimeError {
+			msg: "container terminated non-zero exit code".into(),
+			cause: exit_code.map_or_else(|| "None".into(), |code| format!("{code}").into()),
+		}),
+	}
 }
 
 impl Formula {
@@ -94,7 +134,6 @@ impl Formula {
 		])
 	}
 
-	#[allow(dead_code)]
 	pub async fn run(
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
@@ -217,7 +256,7 @@ mod tests {
 					}
 					crate::events::EventBody::ExitCode(code) => {
 						assert_eq!(code, &Some(0));
-						//return; // stop processing events (this breaks it?)
+						// return; // stop processing events (this breaks it?)
 					}
 				};
 			}

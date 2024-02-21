@@ -6,8 +6,8 @@ use str_cat::os_str_cat;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::select;
+use warpforge_terminal::logln;
 
-#[allow(dead_code)] // Public API
 pub struct Executor {
 	/// Path to use for:
 	///   - the generated short-lived container spec files
@@ -25,7 +25,6 @@ pub struct Executor {
 }
 
 impl Executor {
-	#[allow(dead_code)] // Public API
 	pub async fn run(
 		&self,
 		task: &crate::ContainerParams,
@@ -148,7 +147,6 @@ impl Executor {
 		cmd.stdout(Stdio::piped());
 		cmd.stderr(Stdio::piped());
 
-		println!("about to spawn cmd with runc");
 		let mut child = cmd.spawn().map_err(|e| {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {
@@ -164,7 +162,6 @@ impl Executor {
 				},
 			}
 		})?;
-		println!("somehow, spawned");
 
 		// Take handles to the IO before we spawn the exit wait.
 		// (The exit wait future takes ownership of the `child` value.)
@@ -186,7 +183,7 @@ impl Executor {
 				line = stderr.next_line() => Self::send_container_output(ident, &outbox, 2, line).await?,
 				status = child.wait() => {
 					let status = status.expect("child process encountered an error");
-					println!("child status was: {}", status);
+					logln!("child status was: {}", status);
 					outbox
 						.send(crate::Event {
 							topic: ident.to_owned(),

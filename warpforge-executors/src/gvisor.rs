@@ -1,12 +1,12 @@
 use str_cat::os_str_cat;
 use tokio::io::AsyncBufReadExt;
 use tokio::process::Command;
+use warpforge_terminal::logln;
 
 use std::fs;
 use std::path::PathBuf;
 use std::process::Stdio;
 
-#[allow(dead_code)] // Public API
 pub struct GvisorExecutor {
 	/// Path to use for:
 	///   - the generated short-lived container spec files
@@ -25,7 +25,6 @@ pub struct GvisorExecutor {
 }
 
 impl GvisorExecutor {
-	#[allow(dead_code)] // Public API
 	pub async fn run(
 		&self,
 		task: &crate::ContainerParams,
@@ -116,7 +115,7 @@ impl GvisorExecutor {
 		cmd.stdout(Stdio::piped());
 		cmd.stderr(Stdio::inherit());
 
-		println!("about to spawn");
+		logln!("about to spawn");
 		let mut child = cmd.spawn().map_err(|e| {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {

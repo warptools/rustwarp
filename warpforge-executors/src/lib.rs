@@ -6,10 +6,10 @@ use str_cat::os_str_cat;
 
 mod errors;
 mod events;
-mod formula;
-mod gvisor;
+pub mod formula;
+pub mod gvisor;
 mod oci;
-mod runc;
+pub mod runc;
 
 pub use errors::Error;
 pub use events::Event;
