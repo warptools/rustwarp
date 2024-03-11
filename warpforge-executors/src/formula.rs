@@ -10,7 +10,7 @@ pub enum Formula {
 }
 
 impl Formula {
-	const CONTAINER_BASE_PATH: &str = "/.warpforge.container";
+	const CONTAINER_BASE_PATH: &'static str = "/.warpforge.container";
 
 	pub fn container_script_path() -> PathBuf {
 		PathBuf::from(Self::CONTAINER_BASE_PATH).join("script")
@@ -43,8 +43,8 @@ impl Formula {
 
 		let mut script_file =
 			fs::File::create(script_dir.join("run")).map_err(|e| crate::Error::Catchall {
-				msg: "failed during formula execution:".to_owned()
-					+ &" couldn't open script file for writing".to_owned(),
+				msg: "failed during formula execution: couldn't open script file for writing"
+					.to_owned(),
 				cause: Box::new(e),
 			})?;
 
@@ -58,23 +58,23 @@ impl Formula {
 						cause: Box::new(e),
 					}
 				})?;
-			write!(entry_file, "{}\n", line).map_err(|e| crate::Error::Catchall {
-				msg: "failed during formula execution: ".to_owned()
-					+ &"io error writing ".to_owned()
-					+ &format!("script entry file {}", n).to_string(),
+			writeln!(entry_file, "{}", line).map_err(|e| crate::Error::Catchall {
+				msg: format!(
+					"failed during formula execution: io error writing script entry file {n}",
+				),
 				cause: Box::new(Into::<std::io::Error>::into(e)),
 			})?;
-			write!(
+			writeln!(
 				script_file,
-				". {}\n",
+				". {}",
 				Self::container_script_path()
 					.join(entry_file_name)
 					.display()
 			)
 			.map_err(|e| crate::Error::Catchall {
-				msg: "failed during formula execution: ".to_owned()
-					+ &"io error writing ".to_owned()
-					+ &format!("script file entry {}", n).to_string(),
+				msg: format!(
+					"failed during formula execution: io error writing script file entry {n}"
+				),
 				cause: Box::new(Into::<std::io::Error>::into(e)),
 			})?;
 		}
@@ -102,9 +102,7 @@ impl Formula {
 	) -> Result<(), crate::Error> {
 		let mut mounts = IndexMap::new();
 		let mut environment = IndexMap::new();
-		let formula = match formula_and_context.formula {
-			formula::FormulaCapsule::V1(f) => f,
-		};
+		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
 		// Handle Inputs
 		for (formula::SandboxPort(port), input) in formula.inputs {
@@ -127,7 +125,7 @@ impl Formula {
 					);
 				}
 				Some("/") => {}
-				None | _ => {}
+				None | Some(_) => {}
 			}
 		}
 		// Handle Actions
@@ -297,7 +295,7 @@ mod tests {
 				};
 				println!("event! {:?}", evt);
 			}
-			assert_eq!(output_was_sent, true);
+			assert!(output_was_sent);
 		});
 
 		executor

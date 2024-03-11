@@ -84,7 +84,7 @@ impl MountSpec {
 			destination: dest.as_os_str().to_owned(),
 			kind: OsString::from("none"),
 			source: path.as_os_str().to_owned(),
-			options: options,
+			options,
 		};
 	}
 }
