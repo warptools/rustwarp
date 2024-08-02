@@ -13,7 +13,7 @@ async fn main() {
 	// Simulate tasks that use the logger.
 	do_tasks().await.unwrap();
 
-	sleep(Duration::from_secs(3)).await;
+	let _ = Logger::get_global().unwrap().close().await;
 }
 
 async fn do_tasks() -> Result<()> {
@@ -31,7 +31,7 @@ async fn do_tasks() -> Result<()> {
 		for task in 0..TASKS {
 			logger.set_lower(format!("task{}", task)).await?;
 			logger.set_lower_position(task).await?;
-			sleep(Duration::from_secs(1)).await;
+			sleep(Duration::from_millis(100)).await;
 			logln!("Finished task 'task{task}'");
 		}
 
