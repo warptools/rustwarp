@@ -9,6 +9,7 @@ members = [
     "catverters",
     "catverters-derive",
     "testfiles-derive",
+    "oci-unpack",
 ]
 
 [workspace.package]

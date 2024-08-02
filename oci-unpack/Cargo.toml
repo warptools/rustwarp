@@ -1,0 +1,12 @@
+[package]
+name = "oci-unpack"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+oci-client = "*"
+thiserror.workspace = true
+
+[dev-dependencies]
+# Used for example binary.
+tokio.workspace = true
