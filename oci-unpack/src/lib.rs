@@ -16,7 +16,10 @@ use file_mode::ModePath;
 use flate2::read::GzDecoder;
 use oci_client::{
 	client::{ClientConfig, ImageLayer},
-	manifest::{OciImageManifest, IMAGE_LAYER_GZIP_MEDIA_TYPE, IMAGE_LAYER_MEDIA_TYPE},
+	manifest::{
+		OciImageManifest, IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE, IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
+		IMAGE_LAYER_GZIP_MEDIA_TYPE, IMAGE_LAYER_MEDIA_TYPE,
+	},
 	secrets::RegistryAuth,
 	Client, Reference,
 };
@@ -25,7 +28,16 @@ use oci_spec::image::ImageConfiguration;
 use crate::error::{Error, Result};
 
 // TODO: Consider adding ZSTD support in addition to TAR and GZIP.
-const LAYER_MEDIA_TYPES: [&str; 2] = [IMAGE_LAYER_MEDIA_TYPE, IMAGE_LAYER_GZIP_MEDIA_TYPE];
+const LAYER_MEDIA_TYPES: &[&str] = &[
+	IMAGE_LAYER_MEDIA_TYPE,
+	IMAGE_LAYER_GZIP_MEDIA_TYPE,
+	IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
+	IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE,
+];
+
+fn is_gzip(media_type: &str) -> bool {
+	media_type == IMAGE_LAYER_GZIP_MEDIA_TYPE || media_type == IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE
+}
 
 pub struct BundleInfo {
 	pub manifest: OciImageManifest,
@@ -65,9 +77,12 @@ pub async fn unpack(
 
 	// TODO: Do we need to check diffIDs or are those the digests that are already checked by oci-client?
 	for layer in image_data.layers {
-		// TODO: Check media type and apply correct unpacking.
-		let decoder = GzDecoder::new(&layer.data[..]);
-		tar::Archive::new(decoder).unpack(&rootfs_dir)?;
+		if is_gzip(&layer.media_type) {
+			let decoder = GzDecoder::new(&layer.data[..]);
+			tar::Archive::new(decoder).unpack(&rootfs_dir)?;
+		} else {
+			tar::Archive::new(&layer.data[..]).unpack(&rootfs_dir)?;
+		}
 	}
 
 	Ok(BundleInfo {

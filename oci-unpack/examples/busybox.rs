@@ -7,7 +7,7 @@ use oci_unpack::{error::Result, unpack};
 async fn main() -> Result<()> {
 	let reference = "docker.io/library/busybox:latest".parse().unwrap();
 	let auth = RegistryAuth::Anonymous;
-	let target: PathBuf = "busybox_bundle".into();
+	let target: PathBuf = "../target/busybox_bundle".into();
 
 	// TODO: Remove this:
 	if target.exists() {
