@@ -9,5 +9,13 @@ async fn main() -> Result<()> {
 	let auth = RegistryAuth::Anonymous;
 	let target: PathBuf = "busybox_bundle".into();
 
-	unpack(&reference, &auth, &target).await
+	// TODO: Remove this:
+	if target.exists() {
+		std::fs::remove_dir_all(&target)?;
+	}
+
+	let info = unpack(&reference, &auth, &target).await?;
+	println!("{:#?}", info.manifest);
+
+	Ok(())
 }
