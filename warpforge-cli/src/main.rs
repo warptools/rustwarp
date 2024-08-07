@@ -64,7 +64,7 @@ async fn main2() -> Result<(), Error> {
 
 				let catalog_release = catalog_handle
 					.load_release(&cmd.catalog_ref.module_name, &cmd.catalog_ref.release_name)
-					.map_err(|e| Error::CatalogAccessError { cause: e })?;
+					.map_err(|e| Error::CatalogAccess { cause: e })?;
 
 				match catalog_release.items.get(&cmd.catalog_ref.item_name) {
 					Some(wareid) => {

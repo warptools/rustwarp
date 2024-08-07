@@ -6,10 +6,9 @@ use str_cat::os_str_cat;
 
 mod errors;
 mod events;
+pub mod execute;
 pub mod formula;
-pub mod gvisor;
 mod oci;
-pub mod runc;
 
 pub use errors::Error;
 pub use events::Event;
@@ -21,6 +20,8 @@ pub use events::Event;
 /// So, no more WareIDs down here.  Ware manifestation must have already happened, etc.
 /// Generating any tempdirs for overlayFSes also should've happened already.
 pub struct ContainerParams {
+	/// OCI compatible container runtime.
+	runtime: OsString,
 	command: Vec<String>,
 	/// Mounts, mapped by destination.
 	mounts: IndexMap<OsString, MountSpec>,

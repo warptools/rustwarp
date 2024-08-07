@@ -133,10 +133,10 @@ impl Executor {
 	async fn container_exec(
 		&self,
 		ident: &str,
-		_task: &crate::ContainerParams,
+		task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
-		let mut cmd = Command::new("runc");
+		let mut cmd = Command::new(&task.runtime);
 		cmd.arg(os_str_cat!("--log=", self.log_file));
 		cmd.arg("--debug");
 		cmd.arg("run");
@@ -224,7 +224,7 @@ impl Executor {
 mod tests {
 	use indexmap::IndexMap;
 	use serial_test::serial;
-	use std::path::Path;
+	use std::{ffi::OsString, path::Path};
 	use tokio::sync::mpsc;
 
 	use crate::events::EventBody;
@@ -232,12 +232,13 @@ mod tests {
 	#[tokio::test]
 	#[serial(rootfs)]
 	async fn runc_it_works() {
-		let cfg = crate::runc::Executor {
+		let cfg = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
 			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 		let params = crate::ContainerParams {
+			runtime: OsString::from("runc"),
 			command: vec![
 				"/bin/sh".to_string(),
 				"-c".to_string(),

@@ -20,16 +20,16 @@ pub enum Error {
 	/// MissingPlugin indicates that something is missing in the host environment that we need:
 	/// typically it's another command that should be on $PATH or otherwise discoverable by us.
 	/// (Don't use this for things like a missing kernel feature; that requires a bigger intervention to fix, so deserves a distinct error code.)
-	#[error(
-		"missing a plugin for {subsystem}: could not find or initialize {missing_plugin}: {cause}"
-	)]
-	MissingPlugin {
-		/// The subsystem's descriptive name, e.g. "ware transport", "container engine", etc.
-		subsystem: String,
-		/// A more specific name of what exactly we're missing, e.g. "rio" or "runc", etc.
-		missing_plugin: String,
-		cause: ErrorCause,
-	},
+	// #[error(
+	// 	"missing a plugin for {subsystem}: could not find or initialize {missing_plugin}: {cause}"
+	// )]
+	// MissingPlugin {
+	// 	/// The subsystem's descriptive name, e.g. "ware transport", "container engine", etc.
+	// 	subsystem: String,
+	// 	/// A more specific name of what exactly we're missing, e.g. "rio" or "runc", etc.
+	// 	missing_plugin: String,
+	// 	cause: ErrorCause,
+	// },
 
 	// User-level "404"-like error.
 	#[error("catalog entry doesn't exist -- there is no value referenced as {reference}")]
@@ -40,7 +40,7 @@ pub enum Error {
 	/// Catch-all error for failing to look something up or write something in a catalog.
 	/// Probably contains a filesystem IO error or similar.
 	#[error("error accessing catalog: {cause}")]
-	CatalogAccessError { cause: ErrorCause },
+	CatalogAccess { cause: ErrorCause },
 
 	// Transparent wrapper for executor errors.
 	#[error(transparent)]
@@ -52,9 +52,9 @@ impl Error {
 		match self {
 			Error::InvalidArguments { .. } => 1,
 			Error::BizarreEnvironment { .. } => 4,
-			Error::MissingPlugin { .. } => 7,
+			// Error::MissingPlugin { .. } => 7,
 			Error::CatalogEntryNotExists { .. } => 14,
-			Error::CatalogAccessError { .. } => 15,
+			Error::CatalogAccess { .. } => 15,
 			Error::Executor(..) => 16,
 		}
 	}

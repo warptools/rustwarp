@@ -1,5 +1,6 @@
 use std::{
 	env::current_dir,
+	ffi::OsString,
 	fs::{self, File},
 	io::BufReader,
 	path::{Path, PathBuf},
@@ -17,6 +18,10 @@ pub struct Cmd {
 	/// If no target is provided, run tries to target the current/working directory (cwd)
 	/// as a module. An error is reported if no module is found.
 	pub target: Option<PathBuf>,
+
+	/// Container runtime used to run OCI bundles.
+	#[arg(long, default_value = "runc")]
+	pub runtime: OsString,
 }
 
 pub async fn execute(cli: &Root, cmd: &Cmd) -> Result<(), Error> {
@@ -29,7 +34,7 @@ pub async fn execute(cli: &Root, cmd: &Cmd) -> Result<(), Error> {
 	if meta.is_dir() {
 		execute_module(cli, target).await
 	} else if meta.is_file() {
-		execute_formula(cli, target).await
+		execute_formula(cmd, target).await
 	} else {
 		Err(Error::InvalidArguments {
 			cause: "invalid target: 'run' requires an existing file or directory".into(),
@@ -51,7 +56,7 @@ async fn execute_module(_cli: &Root, path: impl AsRef<Path>) -> Result<(), Error
 	todo!()
 }
 
-async fn execute_formula(_cli: &Root, path: impl AsRef<Path>) -> Result<(), Error> {
+async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 	let file = File::open(path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 	let reader = BufReader::new(file);
 	let formula: FormulaAndContext =
@@ -59,5 +64,5 @@ async fn execute_formula(_cli: &Root, path: impl AsRef<Path>) -> Result<(), Erro
 			cause: format!("invalid formula file: {e}").into(),
 		})?;
 
-	Ok(run_formula(formula).await?)
+	Ok(run_formula(formula, &cmd.runtime).await?)
 }

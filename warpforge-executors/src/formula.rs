@@ -1,4 +1,5 @@
 use indexmap::IndexMap;
+use std::ffi::OsStr;
 use std::io::Write;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
@@ -6,30 +7,31 @@ use warpforge_api::formula::{self, FormulaAndContext};
 use warpforge_terminal::logln;
 
 use crate::events::EventBody;
-use crate::{runc, Error, Event};
+use crate::{execute, Error, Event};
 
-pub enum Formula {
-	Runc(runc::Executor),
-	//Gvisor(crate::gvisor::GvisorExecutor),
+pub struct Formula {
+	executor: execute::Executor,
 }
 
-pub async fn run_formula(formula: FormulaAndContext) -> Result<(), Error> {
+pub async fn run_formula(formula: FormulaAndContext, runtime: &OsStr) -> Result<(), Error> {
 	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
 		msg: "failed to setup temporary dir".into(),
 		cause: Box::new(err),
 	})?;
 
-	let executor = Formula::Runc(runc::Executor {
-		ersatz_dir: temporary_dir.path().join("run"),
-		log_file: temporary_dir.path().join("log"), // TODO: Find a better more persistent location for logs.
-	});
+	let executor = Formula {
+		executor: execute::Executor {
+			ersatz_dir: temporary_dir.path().join("run"),
+			log_file: temporary_dir.path().join("log"), // TODO: Find a better more persistent location for logs.
+		},
+	};
 
 	let (event_sender, mut event_receiver) = mpsc::channel::<Event>(32);
 
 	let event_handler = tokio::spawn(async move {
 		while let Some(event) = event_receiver.recv().await {
 			match &event.body {
-				EventBody::Output { val, .. } => logln!("[runc] {val}\n"),
+				EventBody::Output { val, .. } => logln!("[container] {val}\n"),
 				EventBody::ExitCode(code) => return *code,
 			}
 		}
@@ -37,7 +39,7 @@ pub async fn run_formula(formula: FormulaAndContext) -> Result<(), Error> {
 		None
 	});
 
-	executor.run(formula, event_sender).await?;
+	executor.run(formula, runtime, event_sender).await?;
 
 	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
 		msg: "unexpected error while running runc".into(),
@@ -64,11 +66,7 @@ impl Formula {
 		a: &warpforge_api::formula::ActionScript,
 		mounts: &mut indexmap::IndexMap<std::ffi::OsString, crate::MountSpec>,
 	) -> Result<Vec<std::string::String>, crate::Error> {
-		let ersatz_dir = match self {
-			self::Formula::Runc(crate::runc::Executor { ersatz_dir, .. }) => ersatz_dir,
-		};
-
-		let script_dir = ersatz_dir.join("script");
+		let script_dir = self.executor.ersatz_dir.join("script");
 		use std::fs;
 		fs::create_dir_all(&script_dir).map_err(|e| {
 			let msg = "failed during formula execution: couldn't create script dir".to_owned();
@@ -140,6 +138,7 @@ impl Formula {
 	pub async fn run(
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
+		runtime: &OsStr,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
 		let mut mounts = IndexMap::new();
@@ -183,24 +182,21 @@ impl Formula {
 		};
 
 		let params = crate::ContainerParams {
+			runtime: runtime.to_owned(),
 			command,
 			mounts,
 			environment,
 			root_path: "/tmp/rootfs".to_string(),
 		};
-		match self {
-			Formula::Runc(e) => e.run(&params, outbox).await,
-			/*Formula::Gvisor(_e) => Err(crate::Error::CatchallCauseless {
-				msg: "gvisor executor not implemented".to_string(),
-			}),*/
-		}
+
+		self.executor.run(&params, outbox).await
 	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::path::Path;
+	use std::{ffi::OsString, path::Path};
 
 	use serial_test::serial;
 	use tokio::sync::mpsc;
@@ -240,13 +236,13 @@ mod tests {
 }"#,
 			).expect("failed to parse formula json");
 
-		let cfg = crate::runc::Executor {
+		let executor = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
 			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 
-		let executor = Formula::Runc(cfg);
+		let formula = Formula { executor };
 
 		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
@@ -265,8 +261,8 @@ mod tests {
 			}
 		});
 
-		executor
-			.run(formula_and_context, gather_chan)
+		formula
+			.run(formula_and_context, &OsString::from("runc"), gather_chan)
 			.await
 			.expect("it didn't fail");
 		gather_handle.await.expect("gathering events failed");
@@ -312,13 +308,13 @@ mod tests {
 "#,
 			).expect("failed to parse formula json");
 
-		let cfg = crate::runc::Executor {
+		let executor = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-formula-executor-runc/run").to_owned(),
 			log_file: Path::new("/tmp/warpforge-test-formula-executor-runc/log").to_owned(),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 
-		let executor = Formula::Runc(cfg);
+		let executor = Formula { executor };
 
 		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
@@ -341,7 +337,7 @@ mod tests {
 		});
 
 		executor
-			.run(formula_and_context, gather_chan)
+			.run(formula_and_context, &OsString::from("runc"), gather_chan)
 			.await
 			.expect("it didn't fail");
 		gather_handle.await.expect("gathering events failed");
