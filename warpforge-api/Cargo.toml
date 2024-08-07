@@ -11,6 +11,7 @@ indexmap.workspace = true
 serde.workspace = true
 serde_with = "*"
 derive_more = "*"
+parse-display.workspace = true
 
 [dev-dependencies]
 testfiles-derive = { path = "../testfiles-derive" }
