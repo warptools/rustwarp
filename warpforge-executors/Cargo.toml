@@ -15,6 +15,8 @@ str-cat.workspace = true
 json-patch.workspace = true
 syscalls.workspace = true
 
+tempfile = "*"
+
 [dev-dependencies]
 expect-test.workspace = true
 serial_test = "*"

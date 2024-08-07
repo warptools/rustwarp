@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
+use std::io::Write;
 use std::path::PathBuf;
-use std::{env::temp_dir, io::Write};
 use tokio::sync::mpsc;
 use warpforge_api::formula::{self, FormulaAndContext};
 use warpforge_terminal::logln;
@@ -14,11 +14,14 @@ pub enum Formula {
 }
 
 pub async fn run_formula(formula: FormulaAndContext) -> Result<(), Error> {
-	let temporary_path = temp_dir();
+	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
+		msg: "failed to setup temporary dir".into(),
+		cause: Box::new(err),
+	})?;
 
 	let executor = Formula::Runc(runc::Executor {
-		ersatz_dir: temporary_path.join("run"),
-		log_file: temporary_path.join("log"),
+		ersatz_dir: temporary_dir.path().join("run"),
+		log_file: temporary_dir.path().join("log"), // TODO: Find a better more persistent location for logs.
 	});
 
 	let (event_sender, mut event_receiver) = mpsc::channel::<Event>(32);
