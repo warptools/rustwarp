@@ -30,17 +30,12 @@ impl Executor {
 		task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
-		let ident: &str = "containernamegoeshere"; // todo: generate this.
-		self.prep_bundledir(ident, task)?;
-		self.container_exec(ident, task, outbox).await?;
+		self.prep_bundledir(task)?;
+		self.container_exec(task, outbox).await?;
 		Ok(())
 	}
 
-	fn prep_bundledir(
-		&self,
-		ident: &str,
-		task: &crate::ContainerParams,
-	) -> Result<(), crate::Error> {
+	fn prep_bundledir(&self, task: &crate::ContainerParams) -> Result<(), crate::Error> {
 		// Build the config data.
 		let mut spec = crate::oci::oci_spec_base();
 
@@ -93,7 +88,7 @@ impl Executor {
 		}
 
 		// Write it out.
-		let cfg_dir = self.ersatz_dir.join(ident);
+		let cfg_dir = self.ersatz_dir.join(&task.ident);
 		fs::create_dir_all(&cfg_dir).map_err(|e| {
 			let msg = "failed during executor internals: couldn't create bundle dir".to_owned();
 			match e.kind() {
@@ -132,7 +127,6 @@ impl Executor {
 
 	async fn container_exec(
 		&self,
-		ident: &str,
 		task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
@@ -140,8 +134,8 @@ impl Executor {
 		cmd.arg(os_str_cat!("--log=", self.log_file));
 		cmd.arg("--debug");
 		cmd.arg("run");
-		cmd.arg(os_str_cat!("--bundle=", self.ersatz_dir.join(ident)));
-		cmd.arg(ident); // container name.
+		cmd.arg(os_str_cat!("--bundle=", self.ersatz_dir.join(&task.ident)));
+		cmd.arg(&task.ident); // container name.
 
 		cmd.stdin(Stdio::null());
 		cmd.stdout(Stdio::piped());
@@ -179,14 +173,14 @@ impl Executor {
 
 		loop {
 			select! {
-				line = stdout.next_line() => Self::send_container_output(ident, &outbox, 1, line).await?,
-				line = stderr.next_line() => Self::send_container_output(ident, &outbox, 2, line).await?,
+				line = stdout.next_line() => Self::send_container_output(&task.ident, &outbox, 1, line).await?,
+				line = stderr.next_line() => Self::send_container_output(&task.ident, &outbox, 2, line).await?,
 				status = child.wait() => {
 					let status = status.expect("child process encountered an error");
 					logln!("child status was: {}", status);
 					outbox
 						.send(crate::Event {
-							topic: ident.to_owned(),
+							topic: task.ident.to_owned(),
 							body: crate::events::EventBody::ExitCode(status.code()),
 						})
 						.await
@@ -224,7 +218,7 @@ impl Executor {
 mod tests {
 	use indexmap::IndexMap;
 	use serial_test::serial;
-	use std::{ffi::OsString, path::Path};
+	use std::path::Path;
 	use tokio::sync::mpsc;
 
 	use crate::events::EventBody;
@@ -238,7 +232,8 @@ mod tests {
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 		let params = crate::ContainerParams {
-			runtime: OsString::from("runc"),
+			ident: "containernamegoeshere".into(),
+			runtime: "runc".into(),
 			command: vec![
 				"/bin/sh".to_string(),
 				"-c".to_string(),
@@ -249,7 +244,7 @@ mod tests {
 				IndexMap::new()
 				// todo: more initializer here
 			},
-			root_path: "/tmp/rootfs".to_string(),
+			root_path: "/tmp/rootfs".into(),
 
 			environment: IndexMap::from([
 				("MSG".into(), "hello, from environment variables!".into()),

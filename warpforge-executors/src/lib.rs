@@ -1,5 +1,5 @@
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
 use str_cat::os_str_cat;
@@ -20,13 +20,14 @@ pub use events::Event;
 /// So, no more WareIDs down here.  Ware manifestation must have already happened, etc.
 /// Generating any tempdirs for overlayFSes also should've happened already.
 pub struct ContainerParams {
+	ident: String,
 	/// OCI compatible container runtime.
-	runtime: OsString,
+	runtime: PathBuf,
 	command: Vec<String>,
 	/// Mounts, mapped by destination.
 	mounts: IndexMap<OsString, MountSpec>,
 	environment: IndexMap<OsString, OsString>,
-	root_path: String,
+	root_path: PathBuf,
 }
 
 pub struct MountSpec {

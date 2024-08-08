@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 warpforge-api = { path = "../warpforge-api" }
 warpforge-terminal = { path = "../warpforge-terminal" }
+oci-unpack = { path = "../oci-unpack" }
 
 thiserror.workspace = true
 tokio.workspace = true
@@ -14,6 +15,8 @@ serde_json.workspace = true
 str-cat.workspace = true
 json-patch.workspace = true
 syscalls.workspace = true
+rand.workspace = true
+oci-client.workspace = true
 
 tempfile = "*"
 

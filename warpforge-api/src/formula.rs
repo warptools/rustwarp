@@ -15,6 +15,15 @@ pub struct GatherDirective {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Image {
+	/// OCI Reference to an image. This has to include registry and repository and
+	/// it may include tag and manifest digest.
+	pub reference: String,
+	/// Determines if the rootfs will be mounted with readonly or readwrite permissions.
+	pub readonly: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Action {
 	#[serde(rename = "echo")]
 	Echo,
@@ -47,6 +56,17 @@ pub enum FormulaCapsule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Formula {
+	/// Specifies which image to use to execute the formula.
+	///
+	/// Not (yet) part of the official specification!
+	///
+	/// Added because pulling images from a registry seems to make more sense
+	/// than generating rootfs ourselves. An [OCI Registry] provides a hash over
+	/// the image manifest (which includes hashes to all contents). And we can
+	/// pull images by their manifest digest from the registry for replays.
+	///
+	/// [OCI Registry]: https://github.com/opencontainers/distribution-spec/blob/main/spec.md
+	pub image: Image,
 	pub inputs: IndexMap<SandboxPort, crate::plot::PlotInput>,
 	pub action: Action,
 	pub outputs: IndexMap<crate::plot::LocalLabel, GatherDirective>,

@@ -1,5 +1,7 @@
 use indexmap::IndexMap;
-use std::ffi::OsStr;
+use oci_client::secrets::RegistryAuth;
+use oci_unpack::unpack;
+use rand::distributions::{Alphanumeric, DistString};
 use std::io::Write;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
@@ -13,7 +15,7 @@ pub struct Formula {
 	executor: execute::Executor,
 }
 
-pub async fn run_formula(formula: FormulaAndContext, runtime: &OsStr) -> Result<(), Error> {
+pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result<(), Error> {
 	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
 		msg: "failed to setup temporary dir".into(),
 		cause: Box::new(err),
@@ -138,7 +140,7 @@ impl Formula {
 	pub async fn run(
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
-		runtime: &OsStr,
+		runtime: PathBuf,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
 	) -> Result<(), crate::Error> {
 		let mut mounts = IndexMap::new();
@@ -169,6 +171,7 @@ impl Formula {
 				None | Some(_) => {}
 			}
 		}
+
 		// Handle Actions
 		use warpforge_api::formula::Action;
 		let command: Vec<String> = match &formula.action {
@@ -181,12 +184,28 @@ impl Formula {
 			Action::Script(a) => self.setup_script(a, &mut mounts)?,
 		};
 
+		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+		let ident = format!("warpforge-{random_suffix}");
+
+		let bundle_path = self.executor.ersatz_dir.join(&ident);
+		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
+			msg: "failed to parse image reference".into(),
+			cause: Box::new(err),
+		})?;
+		unpack(&reference, &RegistryAuth::Anonymous, &bundle_path)
+			.await
+			.map_err(|err| Error::SystemSetupError {
+				msg: "failed to obtain image".into(),
+				cause: Box::new(err),
+			})?;
+
 		let params = crate::ContainerParams {
-			runtime: runtime.to_owned(),
+			ident,
+			runtime,
 			command,
 			mounts,
 			environment,
-			root_path: "/tmp/rootfs".to_string(),
+			root_path: bundle_path.join("rootfs"),
 		};
 
 		self.executor.run(&params, outbox).await
@@ -196,7 +215,7 @@ impl Formula {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use std::{ffi::OsString, path::Path};
+	use std::path::Path;
 
 	use serial_test::serial;
 	use tokio::sync::mpsc;
@@ -262,7 +281,7 @@ mod tests {
 		});
 
 		formula
-			.run(formula_and_context, &OsString::from("runc"), gather_chan)
+			.run(formula_and_context, "runc".into(), gather_chan)
 			.await
 			.expect("it didn't fail");
 		gather_handle.await.expect("gathering events failed");
@@ -337,7 +356,7 @@ mod tests {
 		});
 
 		executor
-			.run(formula_and_context, &OsString::from("runc"), gather_chan)
+			.run(formula_and_context, "runc".into(), gather_chan)
 			.await
 			.expect("it didn't fail");
 		gather_handle.await.expect("gathering events failed");

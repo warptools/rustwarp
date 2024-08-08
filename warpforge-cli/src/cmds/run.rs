@@ -1,6 +1,5 @@
 use std::{
 	env::current_dir,
-	ffi::OsString,
 	fs::{self, File},
 	io::BufReader,
 	path::{Path, PathBuf},
@@ -21,7 +20,7 @@ pub struct Cmd {
 
 	/// Container runtime used to run OCI bundles.
 	#[arg(long, default_value = "runc")]
-	pub runtime: OsString,
+	pub runtime: PathBuf,
 }
 
 pub async fn execute(cli: &Root, cmd: &Cmd) -> Result<(), Error> {
@@ -64,5 +63,5 @@ async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error>
 			cause: format!("invalid formula file: {e}").into(),
 		})?;
 
-	Ok(run_formula(formula, &cmd.runtime).await?)
+	Ok(run_formula(formula, cmd.runtime.to_owned()).await?)
 }
