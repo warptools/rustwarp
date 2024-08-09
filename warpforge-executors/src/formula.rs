@@ -220,9 +220,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn formula_exec_runc_it_works() {
-		let formula_and_context: warpforge_api::formula::FormulaAndContext =
-            serde_json::from_str(
-                r#"
+		let formula_and_context: warpforge_api::formula::FormulaAndContext = serde_json::from_str(
+			r#"
 {
   "formula": {
     "formula.v1": {
@@ -231,7 +230,6 @@ mod tests {
         "readonly": true
       },
       "inputs": {
-        "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9",
         "$MSG": "literal:hello from warpforge!"
       },
       "action": {
@@ -248,13 +246,12 @@ mod tests {
   },
   "context": {
     "context.v1": {
-      "warehouses": {
-        "tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9": "https://warpsys.s3.amazonaws.com/warehouse/4z9/DCT/4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
-      }
+      "warehouses": {}
     }
   }
 }"#,
-            ).expect("failed to parse formula json");
+		)
+		.expect("failed to parse formula json");
 
 		let executor = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
@@ -264,7 +261,6 @@ mod tests {
 
 		let formula = Formula { executor };
 
-		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
 			while let Some(evt) = gather_chan_recv.recv().await {
 				println!("event! {:?}", evt);
@@ -275,7 +271,6 @@ mod tests {
 					}
 					crate::events::EventBody::ExitCode(code) => {
 						assert_eq!(code, &Some(0));
-						// return; // stop processing events (this breaks it?)
 					}
 				};
 			}
@@ -290,9 +285,8 @@ mod tests {
 
 	#[tokio::test]
 	async fn formula_script_runc_it_works() {
-		let formula_and_context: warpforge_api::formula::FormulaAndContext =
-            serde_json::from_str(
-                r#"
+		let formula_and_context: warpforge_api::formula::FormulaAndContext = serde_json::from_str(
+			r#"
 {
     "formula": {
         "formula.v1": {
@@ -300,9 +294,7 @@ mod tests {
               "reference": "docker.io/busybox:latest",
               "readonly": true
             },
-            "inputs": {
-                "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
-            },
+            "inputs": {},
             "action": {
                 "script": {
                     "interpreter": "/bin/sh",
@@ -322,14 +314,13 @@ mod tests {
     },
     "context": {
         "context.v1": {
-            "warehouses": {
-                "tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9": "https://warpsys.s3.amazonaws.com/warehouse/4z9/DCT/4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
-            }
+            "warehouses": {}
         }
     }
 }
 "#,
-            ).expect("failed to parse formula json");
+		)
+		.expect("failed to parse formula json");
 
 		let executor = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-formula-executor-runc/run").to_owned(),
@@ -339,9 +330,8 @@ mod tests {
 
 		let executor = Formula { executor };
 
-		// empty gather_chan
 		let gather_handle = tokio::spawn(async move {
-			let mut output_was_sent = false; // gross but i can't think of a better way
+			let mut output_was_sent = false;
 			while let Some(evt) = gather_chan_recv.recv().await {
 				println!("event! {:?}", evt);
 				match &evt.body {
@@ -352,7 +342,6 @@ mod tests {
 					}
 					crate::events::EventBody::ExitCode(code) => {
 						assert_eq!(code, &Some(0));
-						//return; // stop processing events
 					}
 				};
 			}
