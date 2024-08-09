@@ -17,6 +17,7 @@ parse-display.workspace = true
 testfiles-derive = { path = "../testfiles-derive" }
 
 serde_json.workspace = true
+serde_yml.workspace = true
 memchr = "*"
 indoc = "*"
 expect-test.workspace = true

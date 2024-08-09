@@ -31,6 +31,7 @@ tokio-util = "*"
 indexmap = { version = "*", features = ["serde"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*", features = ["preserve_order"] }
+serde_yml = "*"
 str-cat = "*"
 json-patch = "*"
 expect-test = "*"
