@@ -22,4 +22,3 @@ tempfile = "*"
 
 [dev-dependencies]
 expect-test.workspace = true
-serial_test = "*"

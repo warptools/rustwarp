@@ -44,7 +44,7 @@ pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result
 	executor.run(formula, runtime, event_sender).await?;
 
 	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
-		msg: "unexpected error while running runc".into(),
+		msg: "unexpected error while running container".into(),
 		cause: Box::new(e),
 	})?;
 	match exit_code {
@@ -216,19 +216,20 @@ impl Formula {
 mod tests {
 	use super::*;
 	use std::path::Path;
-
-	use serial_test::serial;
 	use tokio::sync::mpsc;
 
 	#[tokio::test]
-	#[serial(rootfs)]
 	async fn formula_exec_runc_it_works() {
 		let formula_and_context: warpforge_api::formula::FormulaAndContext =
-			serde_json::from_str(
-				r#"
+            serde_json::from_str(
+                r#"
 {
   "formula": {
     "formula.v1": {
+      "image": {
+        "reference": "docker.io/busybox:latest",
+        "readonly": true
+      },
       "inputs": {
         "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9",
         "$MSG": "literal:hello from warpforge!"
@@ -253,7 +254,7 @@ mod tests {
     }
   }
 }"#,
-			).expect("failed to parse formula json");
+            ).expect("failed to parse formula json");
 
 		let executor = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
@@ -288,44 +289,47 @@ mod tests {
 	}
 
 	#[tokio::test]
-	#[serial(rootfs)]
 	async fn formula_script_runc_it_works() {
 		let formula_and_context: warpforge_api::formula::FormulaAndContext =
-			serde_json::from_str(
-				r#"
+            serde_json::from_str(
+                r#"
 {
-	"formula": {
-		"formula.v1": {
-			"inputs": {
-				"/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
-			},
-			"action": {
-				"script": {
-					"interpreter": "/bin/sh",
-					"contents": [
-						"MESSAGE='hello, this is a script action'",
-						"echo $MESSAGE"
-					]
-				}
-			},
-			"outputs": {
-				"test": {
-					"from": "/out",
-					"packtype": "tar"
-				}
-			}
-		}
-	},
-	"context": {
-		"context.v1": {
-			"warehouses": {
-				"tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9": "https://warpsys.s3.amazonaws.com/warehouse/4z9/DCT/4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
-			}
-		}
-	}
+    "formula": {
+        "formula.v1": {
+            "image": {
+              "reference": "docker.io/busybox:latest",
+              "readonly": true
+            },
+            "inputs": {
+                "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
+            },
+            "action": {
+                "script": {
+                    "interpreter": "/bin/sh",
+                    "contents": [
+                        "MESSAGE='hello, this is a script action'",
+                        "echo $MESSAGE"
+                    ]
+                }
+            },
+            "outputs": {
+                "test": {
+                    "from": "/out",
+                    "packtype": "tar"
+                }
+            }
+        }
+    },
+    "context": {
+        "context.v1": {
+            "warehouses": {
+                "tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9": "https://warpsys.s3.amazonaws.com/warehouse/4z9/DCT/4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
+            }
+        }
+    }
 }
 "#,
-			).expect("failed to parse formula json");
+            ).expect("failed to parse formula json");
 
 		let executor = crate::execute::Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-formula-executor-runc/run").to_owned(),

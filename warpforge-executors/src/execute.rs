@@ -217,18 +217,29 @@ impl Executor {
 #[cfg(test)]
 mod tests {
 	use indexmap::IndexMap;
-	use serial_test::serial;
-	use std::path::Path;
+	use oci_client::secrets::RegistryAuth;
+	use oci_unpack::unpack;
+	use std::{fs, path::Path};
 	use tokio::sync::mpsc;
 
 	use crate::events::EventBody;
 
 	#[tokio::test]
-	#[serial(rootfs)]
-	async fn runc_it_works() {
+	async fn execute_it_works() {
+		let path = Path::new("/tmp/warpforge-test-executor-runc");
+		if path.is_dir() {
+			fs::remove_dir_all(path).unwrap();
+		}
+
+		let image = &"docker.io/busybox:latest".parse().unwrap();
+		let bundle_path = path.join("bundle");
+		unpack(image, &RegistryAuth::Anonymous, &bundle_path)
+			.await
+			.unwrap();
+
 		let cfg = crate::execute::Executor {
-			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
-			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
+			ersatz_dir: path.join("run"),
+			log_file: path.join("log"),
 		};
 		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
 		let params = crate::ContainerParams {
@@ -244,7 +255,7 @@ mod tests {
 				IndexMap::new()
 				// todo: more initializer here
 			},
-			root_path: "/tmp/rootfs".into(),
+			root_path: bundle_path.join("rootfs"),
 
 			environment: IndexMap::from([
 				("MSG".into(), "hello, from environment variables!".into()),

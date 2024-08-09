@@ -105,6 +105,10 @@ mod tests {
 {
   "formula": {
     "formula.v1": {
+      "image": {
+        "reference": "docker.io/busybox:latest",
+        "readonly": true
+      },
       "inputs": {
         "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
       },
