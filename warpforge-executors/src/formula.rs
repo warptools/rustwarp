@@ -163,8 +163,7 @@ impl Formula {
 								"input environment variable value {}",
 								"contains invalid discriminant"
 							),
-						}
-						.into(),
+						},
 					);
 				}
 				Some("/") => {}

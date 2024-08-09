@@ -81,7 +81,7 @@ impl Executor {
 		// add environment variables
 		for (var, val) in task.environment.iter() {
 			let p: json_patch::Patch = serde_json::from_value(serde_json::json!([
-				{ "op": "add", "path": "/process/env/-", "value": os_str_cat!(var, "=", val).to_str()}
+				{ "op": "add", "path": "/process/env/-", "value": format!("{var}={val}")}
 			]))
 			.unwrap();
 			json_patch::patch(&mut spec, &p).unwrap();
