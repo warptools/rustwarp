@@ -1,3 +1,5 @@
+pub type Result<T> = std::result::Result<T, Error>;
+
 type ErrorCause = Box<dyn ::std::error::Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -23,14 +25,12 @@ pub enum Error {
 		cause: ErrorCause,
 	},
 
+	#[error("{msg}")]
+	SystemSetupCauseless { msg: String },
+
 	#[error("{msg}: {cause}")]
-	Catchall {
-		msg: String, //
-		cause: ErrorCause,
-	},
+	Catchall { msg: String, cause: ErrorCause },
 
 	#[error("{msg}")]
-	CatchallCauseless {
-		msg: String, //
-	},
+	CatchallCauseless { msg: String },
 }

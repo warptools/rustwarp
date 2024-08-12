@@ -8,6 +8,8 @@ use tokio::process::Command;
 use tokio::select;
 use warpforge_terminal::logln;
 
+use crate::{Error, Result};
+
 pub struct Executor {
 	/// Path to use for:
 	///   - the generated short-lived container spec files
@@ -29,13 +31,13 @@ impl Executor {
 		&self,
 		task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
-	) -> Result<(), crate::Error> {
+	) -> Result<()> {
 		self.prep_bundledir(task)?;
 		self.container_exec(task, outbox).await?;
 		Ok(())
 	}
 
-	fn prep_bundledir(&self, task: &crate::ContainerParams) -> Result<(), crate::Error> {
+	fn prep_bundledir(&self, task: &crate::ContainerParams) -> Result<()> {
 		// Build the config data.
 		let mut spec = crate::oci::oci_spec_base();
 
@@ -92,18 +94,18 @@ impl Executor {
 		fs::create_dir_all(&cfg_dir).map_err(|e| {
 			let msg = "failed during executor internals: couldn't create bundle dir".to_owned();
 			match e.kind() {
-				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+				std::io::ErrorKind::PermissionDenied => Error::SystemSetupError {
 					msg,
 					cause: Box::new(e),
 				},
-				_ => crate::Error::SystemRuntimeError {
+				_ => Error::SystemRuntimeError {
 					msg,
 					cause: Box::new(e),
 				},
 			}
 		})?;
 		let f = fs::File::create(cfg_dir.join("config.json")) // Must literally be this name within bundle dir.
-			.map_err(|e| crate::Error::Catchall {
+			.map_err(|e| Error::Catchall {
 				msg:
 					"failed during executor internals: couldn't open bundle config file for writing"
 						.to_owned(),
@@ -111,13 +113,13 @@ impl Executor {
 			})?;
 		serde_json::to_writer_pretty(f, &spec).map_err(|e| {
 			if e.is_io() {
-				return crate::Error::Catchall {
+				return Error::Catchall {
 					msg: "failed during executor internals: io error writing config file"
 						.to_owned(),
 					cause: Box::new(Into::<std::io::Error>::into(e)),
 				};
 			}
-			crate::Error::Catchall {
+			Error::Catchall {
 				msg: "unable to serialize OCI spec file".to_owned(),
 				cause: Box::new(e),
 			}
@@ -129,7 +131,7 @@ impl Executor {
 		&self,
 		task: &crate::ContainerParams,
 		outbox: tokio::sync::mpsc::Sender<crate::Event>,
-	) -> Result<(), crate::Error> {
+	) -> Result<()> {
 		let mut cmd = Command::new(&task.runtime);
 		cmd.arg(os_str_cat!("--log=", self.log_file));
 		cmd.arg("--debug");
@@ -145,12 +147,12 @@ impl Executor {
 			let msg = "failed to spawn containerization process".to_owned();
 			match e.kind() {
 				std::io::ErrorKind::NotFound | std::io::ErrorKind::PermissionDenied => {
-					crate::Error::SystemSetupError {
+					Error::SystemSetupError {
 						msg,
 						cause: Box::new(e),
 					}
 				}
-				_ => crate::Error::SystemRuntimeError {
+				_ => Error::SystemRuntimeError {
 					msg,
 					cause: Box::new(e),
 				},
@@ -195,9 +197,9 @@ impl Executor {
 		ident: &str,
 		outbox: &tokio::sync::mpsc::Sender<crate::Event>,
 		channel: i32,
-		line: Result<Option<String>, std::io::Error>,
-	) -> Result<(), crate::Error> {
-		if let Some(line) = line.map_err(|e| crate::Error::Catchall {
+		line: std::io::Result<Option<String>>,
+	) -> Result<()> {
+		if let Some(line) = line.map_err(|e| Error::Catchall {
 			msg: "system io error communicating with subprocess during executor run".to_owned(),
 			cause: Box::new(e),
 		})? {

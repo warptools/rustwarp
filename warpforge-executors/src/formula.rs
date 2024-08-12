@@ -2,27 +2,29 @@ use indexmap::IndexMap;
 use oci_client::secrets::RegistryAuth;
 use oci_unpack::unpack;
 use rand::distributions::{Alphanumeric, DistString};
+use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use warpforge_api::formula::{self, FormulaAndContext};
+use warpforge_api::formula::{self, ActionScript, FormulaAndContext, FormulaInput};
 use warpforge_terminal::logln;
 
 use crate::events::EventBody;
-use crate::{execute, Error, Event};
+use crate::execute::Executor;
+use crate::{ContainerParams, Error, Event, MountSpec, Result};
 
 pub struct Formula {
-	executor: execute::Executor,
+	executor: Executor,
 }
 
-pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result<(), Error> {
+pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result<()> {
 	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
 		msg: "failed to setup temporary dir".into(),
 		cause: Box::new(err),
 	})?;
 
 	let executor = Formula {
-		executor: execute::Executor {
+		executor: Executor {
 			ersatz_dir: temporary_dir.path().join("run"),
 			log_file: temporary_dir.path().join("log"), // TODO: Find a better more persistent location for logs.
 		},
@@ -65,19 +67,25 @@ impl Formula {
 
 	pub fn setup_script(
 		&self,
-		a: &warpforge_api::formula::ActionScript,
-		mounts: &mut indexmap::IndexMap<std::ffi::OsString, crate::MountSpec>,
-	) -> Result<Vec<std::string::String>, crate::Error> {
+		script: &ActionScript,
+		mounts: &mut IndexMap<String, MountSpec>,
+	) -> Result<Vec<String>> {
 		let script_dir = self.executor.ersatz_dir.join("script");
-		use std::fs;
+
+		// We don't want to give the container access to a pre-existing directory.
+		if script_dir.exists() {
+			let msg = "script directory already existed when trying to setup script".into();
+			return Err(Error::SystemSetupCauseless { msg });
+		}
+
 		fs::create_dir_all(&script_dir).map_err(|e| {
 			let msg = "failed during formula execution: couldn't create script dir".to_owned();
 			match e.kind() {
-				std::io::ErrorKind::PermissionDenied => crate::Error::SystemSetupError {
+				std::io::ErrorKind::PermissionDenied => Error::SystemSetupError {
 					msg,
 					cause: Box::new(e),
 				},
-				_ => crate::Error::SystemRuntimeError {
+				_ => Error::SystemRuntimeError {
 					msg,
 					cause: Box::new(e),
 				},
@@ -85,27 +93,27 @@ impl Formula {
 		})?;
 
 		let mut script_file =
-			fs::File::create(script_dir.join("run")).map_err(|e| crate::Error::Catchall {
+			fs::File::create(script_dir.join("run")).map_err(|e| Error::Catchall {
 				msg: "failed during formula execution: couldn't open script file for writing"
 					.to_owned(),
 				cause: Box::new(e),
 			})?;
 
-		for (n, line) in a.contents.iter().enumerate() {
+		for (n, line) in script.contents.iter().enumerate() {
 			let entry_file_name = format!("entry-{}", n);
 			let mut entry_file =
 				fs::File::create(script_dir.join(&entry_file_name)).map_err(|e| {
-					crate::Error::Catchall {
+					Error::Catchall {
 						msg: "failed during formula execution: couldn't cr".to_owned()
 							+ &format!("eate script entry number {}", n).to_string(),
 						cause: Box::new(e),
 					}
 				})?;
-			writeln!(entry_file, "{}", line).map_err(|e| crate::Error::Catchall {
+			writeln!(entry_file, "{}", line).map_err(|e| Error::Catchall {
 				msg: format!(
 					"failed during formula execution: io error writing script entry file {n}",
 				),
-				cause: Box::new(Into::<std::io::Error>::into(e)),
+				cause: Box::new(e),
 			})?;
 			writeln!(
 				script_file,
@@ -114,25 +122,26 @@ impl Formula {
 					.join(entry_file_name)
 					.display()
 			)
-			.map_err(|e| crate::Error::Catchall {
+			.map_err(|e| Error::Catchall {
 				msg: format!(
 					"failed during formula execution: io error writing script file entry {n}"
 				),
-				cause: Box::new(Into::<std::io::Error>::into(e)),
+				cause: Box::new(e),
 			})?;
 		}
 
 		// mount the script into the container
 		mounts.insert(
-			Self::container_script_path().as_os_str().to_owned(),
-			crate::MountSpec::new_bind(&script_dir, &Self::container_script_path(), false),
+			Self::container_script_path().to_str().unwrap().into(),
+			MountSpec::new_bind(&script_dir, Self::container_script_path(), false),
 		);
 
 		Ok(vec![
-			a.interpreter.to_owned(),
+			script.interpreter.to_owned(),
 			Self::container_script_path()
 				.join("run")
-				.display()
+				.to_str()
+				.unwrap()
 				.to_string(),
 		])
 	}
@@ -141,8 +150,8 @@ impl Formula {
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
 		runtime: PathBuf,
-		outbox: tokio::sync::mpsc::Sender<crate::Event>,
-	) -> Result<(), crate::Error> {
+		outbox: tokio::sync::mpsc::Sender<Event>,
+	) -> Result<()> {
 		let mut mounts = IndexMap::new();
 		let mut environment = IndexMap::new();
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
@@ -153,21 +162,27 @@ impl Formula {
 			match port.get(..1) {
 				// TODO replace this with a catverter macro
 				Some("$") => {
-					environment.insert(
-						port.get(1..)
-							.expect("environment variable with empty name")
-							.into(),
-						match input {
-							warpforge_api::plot::PlotInput::Literal(l) => l,
-							_ => panic!(
-								"input environment variable value {}",
-								"contains invalid discriminant"
-							),
-						},
-					);
+					let env_name = match port.get(1..) {
+						// Have to check for empty string, because: `"$".get(1..) == Some("")`
+						Some(name) if !name.is_empty() => name.to_string(),
+						_ => {
+							let msg = "environment variable with empty name".into();
+							return Err(Error::SystemSetupCauseless { msg });
+						}
+					};
+					let FormulaInput::Literal(env_value) = input else {
+						let msg =
+							format!("value of environment variable '{env_name}' has to be literal");
+						return Err(Error::SystemSetupCauseless { msg });
+					};
+
+					environment.insert(env_name, env_value);
 				}
 				Some("/") => {}
-				None | Some(_) => {}
+				_ => {
+					let msg = format!("invalid formula input '{}'", port);
+					return Err(Error::SystemSetupCauseless { msg });
+				}
 			}
 		}
 
@@ -198,7 +213,7 @@ impl Formula {
 				cause: Box::new(err),
 			})?;
 
-		let params = crate::ContainerParams {
+		let params = ContainerParams {
 			ident,
 			runtime,
 			command,
@@ -252,11 +267,11 @@ mod tests {
 		)
 		.expect("failed to parse formula json");
 
-		let executor = crate::execute::Executor {
+		let executor = Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
 			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
 		};
-		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
+		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<Event>(32);
 
 		let formula = Formula { executor };
 
@@ -264,11 +279,11 @@ mod tests {
 			while let Some(evt) = gather_chan_recv.recv().await {
 				println!("event! {:?}", evt);
 				match &evt.body {
-					crate::events::EventBody::Output { channel, val } => {
+					EventBody::Output { channel, val } => {
 						assert_eq!(channel, &1);
 						assert_eq!(val, "hello from warpforge!");
 					}
-					crate::events::EventBody::ExitCode(code) => {
+					EventBody::ExitCode(code) => {
 						assert_eq!(code, &Some(0));
 					}
 				};
@@ -321,11 +336,11 @@ mod tests {
 		)
 		.expect("failed to parse formula json");
 
-		let executor = crate::execute::Executor {
+		let executor = Executor {
 			ersatz_dir: Path::new("/tmp/warpforge-test-formula-executor-runc/run").to_owned(),
 			log_file: Path::new("/tmp/warpforge-test-formula-executor-runc/log").to_owned(),
 		};
-		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
+		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<Event>(32);
 
 		let executor = Formula { executor };
 
@@ -334,12 +349,12 @@ mod tests {
 			while let Some(evt) = gather_chan_recv.recv().await {
 				println!("event! {:?}", evt);
 				match &evt.body {
-					crate::events::EventBody::Output { channel, val } => {
+					EventBody::Output { channel, val } => {
 						assert_eq!(channel, &1);
 						assert_eq!(val, "hello, this is a script action");
 						output_was_sent = true;
 					}
-					crate::events::EventBody::ExitCode(code) => {
+					EventBody::ExitCode(code) => {
 						assert_eq!(code, &Some(0));
 					}
 				};

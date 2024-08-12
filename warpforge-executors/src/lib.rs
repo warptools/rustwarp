@@ -1,8 +1,6 @@
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use indexmap::IndexMap;
-use str_cat::os_str_cat;
 
 mod errors;
 mod events;
@@ -11,6 +9,7 @@ pub mod formula;
 mod oci;
 
 pub use errors::Error;
+pub use errors::Result;
 pub use events::Event;
 
 /// This struct contains most of the parameters of a container execution that vary in Warpforge.
@@ -25,21 +24,21 @@ pub struct ContainerParams {
 	runtime: PathBuf,
 	command: Vec<String>,
 	/// Mounts, mapped by destination.
-	mounts: IndexMap<OsString, MountSpec>,
+	mounts: IndexMap<String, MountSpec>,
 	environment: IndexMap<String, String>,
 	root_path: PathBuf,
 }
 
 pub struct MountSpec {
 	/// The destination mount path.  Should be absolute.
-	destination: OsString,
+	destination: String,
 
 	/// Typical mount types include "overlay", "tmpfs", "rbind".
-	kind: OsString,
+	kind: String,
 
 	/// Often, "none", or repeats the kind.
 	/// For bind mounts, this is another path.
-	source: OsString,
+	source: String,
 
 	/// Freetext, more or less.
 	/// What exactly this means depends on the mount type, and is processed by that particular subsystem.
@@ -50,43 +49,47 @@ pub struct MountSpec {
 	///
 	/// For overlayfs, several paths go in here.  Consider using our helpful constructor for munging those
 	/// (but ultimately it's just syntactic sugar for composing options strings).
-	options: Vec<OsString>,
+	options: Vec<String>,
+}
+
+/// Since paths originate from json or rs files, they should always be UTF-8.
+/// If an user tries to use non-UTF-8 paths, this should be detected at json deserialization.
+fn to_string_or_panic(path: impl AsRef<Path>) -> String {
+	path.as_ref()
+		.to_str()
+		.expect("encountered non-UTF-8 path")
+		.into()
 }
 
 impl MountSpec {
-	pub fn new_overlayfs(dest: &Path, lowerdir: &Path, upperdir: &Path, workdir: &Path) -> Self {
-		return MountSpec {
-			destination: dest.as_os_str().to_owned(),
-			kind: OsString::from("overlayfs"),
-			source: OsString::from("none"),
+	pub fn new_overlayfs(
+		dest: impl AsRef<Path>,
+		lowerdir: impl AsRef<Path>,
+		upperdir: impl AsRef<Path>,
+		workdir: impl AsRef<Path>,
+	) -> Self {
+		MountSpec {
+			destination: to_string_or_panic(dest),
+			kind: "overlayfs".into(),
+			source: "none".into(),
 			options: vec![
-				// Holy smokes string ops in rust are spicy.
-				// Path is not constrained to UTF8, and neither is OsString, so we're staying in those two.
-				// But concatenation isn't really implemented on OsString, at least not in the std lib, as far as I can tell while writing this.
-				// So there's a crate for that.
-				//
-				// Mind, all of this is a huge farce, because we're going to end up passing these around in JSON anyway.
-				// (For any of the OCI-based executors, that's how we communicate with them.)
-				// And JSON doesn't support non-UTF string sequences.
-				// Whoopsie.
-				// Nonetheless: I do like as much of the code as possible to be correct in handling sequences losslessly.
-				os_str_cat!("lowerdir=", lowerdir),
-				os_str_cat!("upperdir=", upperdir),
-				os_str_cat!("workdir=", workdir),
+				format!("lowerdir={}", to_string_or_panic(lowerdir)),
+				format!("upperdir={}", to_string_or_panic(upperdir)),
+				format!("workdir={}", to_string_or_panic(workdir)),
 			],
-		};
+		}
 	}
 
-	pub fn new_bind(path: &Path, dest: &Path, read_only: bool) -> Self {
-		let mut options: Vec<OsString> = vec!["rbind".into()];
+	pub fn new_bind(path: impl AsRef<Path>, dest: impl AsRef<Path>, read_only: bool) -> Self {
+		let mut options = vec!["rbind".into()];
 		if read_only {
 			options.push("ro".into())
 		};
-		return MountSpec {
-			destination: dest.as_os_str().to_owned(),
-			kind: OsString::from("none"),
-			source: path.as_os_str().to_owned(),
+		MountSpec {
+			destination: to_string_or_panic(dest),
+			kind: "none".into(),
+			source: to_string_or_panic(path),
 			options,
-		};
+		}
 	}
 }
