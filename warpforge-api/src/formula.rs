@@ -1,10 +1,37 @@
 use derive_more::{Display, FromStr};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+
+use crate::content::WareID;
 
 // FUTURE: Could be represneted as an enum, discriminating on the first char being '/' or '$'
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
 pub struct SandboxPort(pub String);
+
+#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
+pub enum Mount {
+	#[discriminant = "ro"]
+	ReadOnly(String),
+
+	#[discriminant = "rw"]
+	ReadWrite(String),
+
+	#[discriminant = "overlay"]
+	Overlay(String),
+}
+
+#[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
+pub enum FormulaInput {
+	#[discriminant = "ware"]
+	Ware(WareID),
+
+	#[discriminant = "mount"]
+	Mount(Mount),
+
+	#[discriminant = "literal"]
+	Literal(String),
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct GatherDirective {
@@ -67,7 +94,7 @@ pub struct Formula {
 	///
 	/// [OCI Registry]: https://github.com/opencontainers/distribution-spec/blob/main/spec.md
 	pub image: Image,
-	pub inputs: IndexMap<SandboxPort, crate::plot::PlotInput>,
+	pub inputs: IndexMap<SandboxPort, FormulaInput>,
 	pub action: Action,
 	pub outputs: IndexMap<crate::plot::LocalLabel, GatherDirective>,
 }
@@ -110,7 +137,10 @@ mod tests {
         "readonly": true
       },
       "inputs": {
-        "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9"
+        "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9",
+        "/some/ro/path": "mount:ro:/host/readonly/path",
+        "/some/rw/path": "mount:rw:/host/readwrite/path",
+        "/some/overlay/path": "mount:overlay:/host/overlay/path"
       },
       "action": {
         "exec": {

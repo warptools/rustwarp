@@ -3,6 +3,8 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
+use crate::formula::Mount;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PlotCapsule {
 	#[serde(rename = "plot.v1")]
@@ -27,8 +29,9 @@ pub enum PlotInput {
 	#[discriminant = "ware"]
 	Ware(crate::content::WareID),
 
-	// #[discriminant = "mount"]
-	// Mount(crate::compute::Mount),
+	#[discriminant = "mount"]
+	Mount(Mount),
+
 	#[discriminant = "literal"]
 	Literal(String),
 
