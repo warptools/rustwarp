@@ -221,17 +221,15 @@ mod tests {
 	use indexmap::IndexMap;
 	use oci_client::secrets::RegistryAuth;
 	use oci_unpack::unpack;
-	use std::{fs, path::Path};
+	use tempfile::TempDir;
 	use tokio::sync::mpsc;
 
 	use crate::events::EventBody;
 
 	#[tokio::test]
 	async fn execute_it_works() {
-		let path = Path::new("/tmp/warpforge-test-executor-runc");
-		if path.is_dir() {
-			fs::remove_dir_all(path).unwrap();
-		}
+		let temp_dir = TempDir::new().unwrap();
+		let path = temp_dir.path();
 
 		let image = &"docker.io/busybox:latest".parse().unwrap();
 		let bundle_path = path.join("bundle");
@@ -252,11 +250,7 @@ mod tests {
 				"-c".to_string(),
 				"echo $MSG".to_string(),
 			],
-			mounts: {
-				// IndexMap does have a From trait, but I didn't want to copy the destinations manually.
-				IndexMap::new()
-				// todo: more initializer here
-			},
+			mounts: { IndexMap::new() },
 			root_path: bundle_path.join("rootfs"),
 
 			environment: IndexMap::from([

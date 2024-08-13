@@ -8,6 +8,9 @@ pub mod execute;
 pub mod formula;
 mod oci;
 
+#[cfg(test)]
+mod test;
+
 pub use errors::Error;
 pub use errors::Result;
 pub use events::Event;

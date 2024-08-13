@@ -6,7 +6,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use warpforge_api::formula::{self, ActionScript, FormulaAndContext, FormulaInput};
+use warpforge_api::formula::{self, ActionScript, FormulaAndContext, FormulaInput, Mount};
 use warpforge_terminal::logln;
 
 use crate::events::EventBody;
@@ -14,7 +14,7 @@ use crate::execute::Executor;
 use crate::{ContainerParams, Error, Event, MountSpec, Result};
 
 pub struct Formula {
-	executor: Executor,
+	pub(crate) executor: Executor,
 }
 
 pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result<()> {
@@ -178,7 +178,29 @@ impl Formula {
 
 					environment.insert(env_name, env_value);
 				}
-				Some("/") => {}
+				Some("/") => {
+					match input {
+						FormulaInput::Ware(_ware_id) => todo!(),
+						// TODO: Handle non-absolute host paths.
+						FormulaInput::Mount(Mount::ReadOnly(host_path)) => {
+							let mount_spec = MountSpec::new_bind(host_path, &port, true);
+							mounts.insert(port, mount_spec);
+						}
+						// TODO: Handle non-absolute host paths.
+						FormulaInput::Mount(Mount::ReadWrite(host_path)) => {
+							let mount_spec = MountSpec::new_bind(host_path, &port, false);
+							mounts.insert(port, mount_spec);
+						}
+						FormulaInput::Mount(Mount::Overlay(_host_path)) => {
+							// mounts.insert(port, MountSpec::new_overlayfs(dest, lowerdir, upperdir, workdir)
+							todo!()
+						}
+						FormulaInput::Literal(_) => {
+							let msg = format!("formula input '{}': 'literal' not supported, use 'ware' or 'mount'", port);
+							return Err(Error::SystemSetupCauseless { msg });
+						}
+					}
+				}
 				_ => {
 					let msg = format!("invalid formula input '{}'", port);
 					return Err(Error::SystemSetupCauseless { msg });
@@ -223,149 +245,5 @@ impl Formula {
 		};
 
 		self.executor.run(&params, outbox).await
-	}
-}
-
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use std::path::Path;
-	use tokio::sync::mpsc;
-
-	#[tokio::test]
-	async fn formula_exec_runc_it_works() {
-		let formula_and_context: warpforge_api::formula::FormulaAndContext = serde_json::from_str(
-			r#"
-{
-  "formula": {
-    "formula.v1": {
-      "image": {
-        "reference": "docker.io/busybox:latest",
-        "readonly": true
-      },
-      "inputs": {
-        "$MSG": "literal:hello from warpforge!"
-      },
-      "action": {
-        "exec": {
-          "command": [
-            "/bin/sh",
-            "-c",
-            "echo $MSG"
-          ]
-        }
-      },
-      "outputs": {}
-    }
-  },
-  "context": {
-    "context.v1": {
-      "warehouses": {}
-    }
-  }
-}"#,
-		)
-		.expect("failed to parse formula json");
-
-		let executor = Executor {
-			ersatz_dir: Path::new("/tmp/warpforge-test-executor-runc/run").to_owned(),
-			log_file: Path::new("/tmp/warpforge-test-executor-runc/log").to_owned(),
-		};
-		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<Event>(32);
-
-		let formula = Formula { executor };
-
-		let gather_handle = tokio::spawn(async move {
-			while let Some(evt) = gather_chan_recv.recv().await {
-				println!("event! {:?}", evt);
-				match &evt.body {
-					EventBody::Output { channel, val } => {
-						assert_eq!(channel, &1);
-						assert_eq!(val, "hello from warpforge!");
-					}
-					EventBody::ExitCode(code) => {
-						assert_eq!(code, &Some(0));
-					}
-				};
-			}
-		});
-
-		formula
-			.run(formula_and_context, "runc".into(), gather_chan)
-			.await
-			.expect("it didn't fail");
-		gather_handle.await.expect("gathering events failed");
-	}
-
-	#[tokio::test]
-	async fn formula_script_runc_it_works() {
-		let formula_and_context: warpforge_api::formula::FormulaAndContext = serde_json::from_str(
-			r#"
-{
-    "formula": {
-        "formula.v1": {
-            "image": {
-              "reference": "docker.io/busybox:latest",
-              "readonly": true
-            },
-            "inputs": {},
-            "action": {
-                "script": {
-                    "interpreter": "/bin/sh",
-                    "contents": [
-                        "MESSAGE='hello, this is a script action'",
-                        "echo $MESSAGE"
-                    ]
-                }
-            },
-            "outputs": {
-                "test": {
-                    "from": "/out",
-                    "packtype": "tar"
-                }
-            }
-        }
-    },
-    "context": {
-        "context.v1": {
-            "warehouses": {}
-        }
-    }
-}
-"#,
-		)
-		.expect("failed to parse formula json");
-
-		let executor = Executor {
-			ersatz_dir: Path::new("/tmp/warpforge-test-formula-executor-runc/run").to_owned(),
-			log_file: Path::new("/tmp/warpforge-test-formula-executor-runc/log").to_owned(),
-		};
-		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<Event>(32);
-
-		let executor = Formula { executor };
-
-		let gather_handle = tokio::spawn(async move {
-			let mut output_was_sent = false;
-			while let Some(evt) = gather_chan_recv.recv().await {
-				println!("event! {:?}", evt);
-				match &evt.body {
-					EventBody::Output { channel, val } => {
-						assert_eq!(channel, &1);
-						assert_eq!(val, "hello, this is a script action");
-						output_was_sent = true;
-					}
-					EventBody::ExitCode(code) => {
-						assert_eq!(code, &Some(0));
-					}
-				};
-			}
-			assert!(output_was_sent);
-		});
-
-		executor
-			.run(formula_and_context, "runc".into(), gather_chan)
-			.await
-			.expect("it didn't fail");
-		gather_handle.await.expect("gathering events failed");
 	}
 }
