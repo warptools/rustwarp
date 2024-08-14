@@ -6,7 +6,7 @@ use std::{
 };
 
 use warpforge_api::{constants::MAGIC_FILENAME_MODULE, formula::FormulaAndContext};
-use warpforge_executors::formula::run_formula;
+use warpforge_executors::{context::Context, formula::run_formula};
 
 use crate::{cmds::Root, Error};
 
@@ -56,12 +56,30 @@ async fn execute_module(_cli: &Root, path: impl AsRef<Path>) -> Result<(), Error
 }
 
 async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
-	let file = File::open(path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
+	let file = File::open(&path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 	let reader = BufReader::new(file);
 	let formula: FormulaAndContext =
 		serde_json::from_reader(reader).map_err(|e| Error::InvalidArguments {
 			cause: format!("invalid formula file: {e}").into(),
 		})?;
 
-	Ok(run_formula(formula, cmd.runtime.to_owned()).await?)
+	let parent = if path.as_ref().is_absolute() {
+		path.as_ref().parent().map(ToOwned::to_owned)
+	} else {
+		(path.as_ref().canonicalize())
+			.map_err(|err| Error::BizarreEnvironment {
+				cause: Box::new(err),
+			})?
+			.parent()
+			.map(ToOwned::to_owned)
+	};
+	let parent = parent.ok_or_else(|| Error::BizarreEnvironment {
+		cause: "could not get parent of formula file after successfully reading it".into(), // has to be race condition
+	})?;
+
+	let context = Context {
+		runtime: cmd.runtime.to_owned(),
+		mount_path: Some(parent),
+	};
+	Ok(run_formula(formula, &context).await?)
 }

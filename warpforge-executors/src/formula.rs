@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use warpforge_api::formula::{self, ActionScript, FormulaAndContext, FormulaInput, Mount};
 use warpforge_terminal::logln;
 
+use crate::context::Context;
 use crate::events::EventBody;
 use crate::execute::Executor;
 use crate::{ContainerParams, Error, Event, MountSpec, Result};
@@ -17,7 +18,7 @@ pub struct Formula {
 	pub(crate) executor: Executor,
 }
 
-pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result<()> {
+pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<()> {
 	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
 		msg: "failed to setup temporary dir".into(),
 		cause: Box::new(err),
@@ -43,7 +44,7 @@ pub async fn run_formula(formula: FormulaAndContext, runtime: PathBuf) -> Result
 		None
 	});
 
-	executor.run(formula, runtime, event_sender).await?;
+	executor.run(formula, context, event_sender).await?;
 
 	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
 		msg: "unexpected error while running container".into(),
@@ -67,6 +68,7 @@ impl Formula {
 
 	pub fn setup_script(
 		&self,
+		context: &Context,
 		script: &ActionScript,
 		mounts: &mut IndexMap<String, MountSpec>,
 	) -> Result<Vec<String>> {
@@ -133,7 +135,7 @@ impl Formula {
 		// mount the script into the container
 		mounts.insert(
 			Self::container_script_path().to_str().unwrap().into(),
-			MountSpec::new_bind(&script_dir, Self::container_script_path(), false),
+			MountSpec::new_bind(context, &script_dir, Self::container_script_path(), false)?,
 		);
 
 		Ok(vec![
@@ -149,7 +151,7 @@ impl Formula {
 	pub async fn run(
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
-		runtime: PathBuf,
+		context: &Context,
 		outbox: tokio::sync::mpsc::Sender<Event>,
 	) -> Result<()> {
 		let mut mounts = IndexMap::new();
@@ -181,14 +183,12 @@ impl Formula {
 				Some("/") => {
 					match input {
 						FormulaInput::Ware(_ware_id) => todo!(),
-						// TODO: Handle non-absolute host paths.
 						FormulaInput::Mount(Mount::ReadOnly(host_path)) => {
-							let mount_spec = MountSpec::new_bind(host_path, &port, true);
+							let mount_spec = MountSpec::new_bind(context, host_path, &port, true)?;
 							mounts.insert(port, mount_spec);
 						}
-						// TODO: Handle non-absolute host paths.
 						FormulaInput::Mount(Mount::ReadWrite(host_path)) => {
-							let mount_spec = MountSpec::new_bind(host_path, &port, false);
+							let mount_spec = MountSpec::new_bind(context, host_path, &port, false)?;
 							mounts.insert(port, mount_spec);
 						}
 						FormulaInput::Mount(Mount::Overlay(_host_path)) => {
@@ -217,7 +217,7 @@ impl Formula {
 			]
 			.to_owned(),
 			Action::Execute(a) => a.command.to_owned(),
-			Action::Script(a) => self.setup_script(a, &mut mounts)?,
+			Action::Script(a) => self.setup_script(context, a, &mut mounts)?,
 		};
 
 		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
@@ -237,7 +237,7 @@ impl Formula {
 
 		let params = ContainerParams {
 			ident,
-			runtime,
+			runtime: context.runtime.clone(),
 			command,
 			mounts,
 			environment,

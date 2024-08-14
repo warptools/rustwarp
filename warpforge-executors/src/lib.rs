@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
+use context::Context;
 use indexmap::IndexMap;
 
+pub mod context;
 mod errors;
 mod events;
 pub mod execute;
@@ -83,16 +85,33 @@ impl MountSpec {
 		}
 	}
 
-	pub fn new_bind(path: impl AsRef<Path>, dest: impl AsRef<Path>, read_only: bool) -> Self {
+	pub fn new_bind(
+		context: &Context,
+		path: impl AsRef<Path>,
+		dest: impl AsRef<Path>,
+		read_only: bool,
+	) -> Result<Self> {
+		let source = if path.as_ref().is_absolute() {
+			to_string_or_panic(path)
+		} else {
+			let path = match &context.mount_path {
+				Some(mount_path) if mount_path.is_absolute() => mount_path.join(path),
+				_ => {
+					return Err(Error::SystemSetupCauseless { msg: "failed to create mount: relative paths require context to provide absolute mount path".into() });
+				}
+			};
+			path.to_str().ok_or_else(|| Error::SystemSetupCauseless { msg: "non-UTF-8 characters in mount path: to use relative mount paths, the path to the .wf file must be UTF-8".into() })?.to_string()
+		};
+
 		let mut options = vec!["rbind".into()];
 		if read_only {
 			options.push("ro".into())
 		};
-		MountSpec {
+		Ok(MountSpec {
 			destination: to_string_or_panic(dest),
 			kind: "none".into(),
-			source: to_string_or_panic(path),
+			source,
 			options,
-		}
+		})
 	}
 }

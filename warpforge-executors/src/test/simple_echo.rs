@@ -1,7 +1,7 @@
 use serde_json::json;
 use warpforge_api::formula::FormulaAndContext;
 
-use crate::test::{run_formula_collect_output, RunOutputLine};
+use crate::test::{default_context, run_formula_collect_output, RunOutputLine};
 
 #[tokio::test]
 async fn formula_exec_runc_it_works() {
@@ -35,7 +35,7 @@ async fn formula_exec_runc_it_works() {
 	}))
 	.expect("failed to parse formula json");
 
-	let result = run_formula_collect_output(formula_and_context)
+	let result = run_formula_collect_output(formula_and_context, &default_context())
 		.await
 		.unwrap();
 
@@ -79,7 +79,7 @@ async fn formula_script_runc_it_works() {
 	}))
 	.expect("failed to parse formula json");
 
-	let result = run_formula_collect_output(formula_and_context)
+	let result = run_formula_collect_output(formula_and_context, &default_context())
 		.await
 		.unwrap();
 

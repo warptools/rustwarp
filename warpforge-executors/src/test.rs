@@ -2,7 +2,9 @@ use tempfile::TempDir;
 use tokio::sync::mpsc;
 use warpforge_api::formula::FormulaAndContext;
 
-use crate::{events::EventBody, execute::Executor, formula::Formula, Event, Result};
+use crate::{
+	context::Context, events::EventBody, execute::Executor, formula::Formula, Event, Result,
+};
 
 mod simple_echo;
 mod simple_mount;
@@ -19,7 +21,17 @@ struct RunOutputLine {
 	line: String,
 }
 
-async fn run_formula_collect_output(formula_and_context: FormulaAndContext) -> Result<RunOutput> {
+fn default_context() -> Context {
+	Context {
+		runtime: "runc".into(),
+		..Default::default()
+	}
+}
+
+async fn run_formula_collect_output(
+	formula_and_context: FormulaAndContext,
+	context: &Context,
+) -> Result<RunOutput> {
 	let tempdir = TempDir::new().unwrap();
 	let executor = Executor {
 		ersatz_dir: tempdir.path().join("run"),
@@ -50,7 +62,7 @@ async fn run_formula_collect_output(formula_and_context: FormulaAndContext) -> R
 	});
 
 	formula
-		.run(formula_and_context, "runc".into(), gather_chan)
+		.run(formula_and_context, context, gather_chan)
 		.await?;
 
 	Ok(gather_handle.await.expect("gathering events failed"))
