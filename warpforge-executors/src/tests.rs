@@ -6,6 +6,7 @@ use crate::{
 	context::Context, events::EventBody, execute::Executor, formula::Formula, Event, Result,
 };
 
+mod mount_overlayfs;
 mod simple_echo;
 mod simple_mount;
 

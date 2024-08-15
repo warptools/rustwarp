@@ -1,7 +1,7 @@
 use serde_json::json;
 use warpforge_api::formula::FormulaAndContext;
 
-use crate::test::{default_context, run_formula_collect_output, RunOutputLine};
+use crate::tests::{default_context, run_formula_collect_output, RunOutputLine};
 
 #[tokio::test]
 async fn formula_exec_runc_it_works() {

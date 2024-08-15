@@ -4,7 +4,7 @@ use serde_json::json;
 use tempfile::TempDir;
 use warpforge_api::formula::FormulaAndContext;
 
-use crate::test::{default_context, run_formula_collect_output};
+use crate::tests::{default_context, run_formula_collect_output};
 
 #[tokio::test]
 async fn runc_rbind_mounts() {

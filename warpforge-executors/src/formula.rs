@@ -191,9 +191,11 @@ impl Formula {
 							let mount_spec = MountSpec::new_bind(context, host_path, &port, false)?;
 							mounts.insert(port, mount_spec);
 						}
-						FormulaInput::Mount(Mount::Overlay(_host_path)) => {
-							// mounts.insert(port, MountSpec::new_overlayfs(dest, lowerdir, upperdir, workdir)
-							todo!()
+						FormulaInput::Mount(Mount::Overlay(host_path)) => {
+							let run_dir = &self.executor.ersatz_dir;
+							let mount_spec =
+								MountSpec::new_overlayfs(context, host_path, &port, run_dir)?;
+							mounts.insert(port, mount_spec);
 						}
 						FormulaInput::Literal(_) => {
 							let msg = format!("formula input '{}': 'literal' not supported, use 'ware' or 'mount'", port);
