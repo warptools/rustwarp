@@ -6,7 +6,11 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
-use warpforge_api::formula::{self, ActionScript, FormulaAndContext, FormulaInput, Mount};
+use warpforge_api::content::Packtype;
+use warpforge_api::formula::{
+	self, ActionScript, FormulaAndContext, FormulaInput, GatherDirective, Mount, SandboxPort,
+};
+use warpforge_api::plot::LocalLabel;
 use warpforge_terminal::logln;
 
 use crate::context::Context;
@@ -154,12 +158,61 @@ impl Formula {
 		context: &Context,
 		outbox: tokio::sync::mpsc::Sender<Event>,
 	) -> Result<()> {
-		let mut mounts = IndexMap::new();
-		let mut environment = IndexMap::new();
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
-		// Handle Inputs
-		for (formula::SandboxPort(port), input) in formula.inputs {
+		let (mut mounts, environment) = self.setup_inputs(formula.inputs, context)?;
+
+		let _outputs = self.setup_outputs(formula.outputs, &mut mounts, context)?;
+
+		// Handle Actions
+		use warpforge_api::formula::Action;
+		let command: Vec<String> = match &formula.action {
+			Action::Echo => vec![
+				"echo".to_string(),
+				"what is the \"Echo\" Action for?".to_string(),
+			]
+			.to_owned(),
+			Action::Execute(a) => a.command.to_owned(),
+			Action::Script(a) => self.setup_script(context, a, &mut mounts)?,
+		};
+
+		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
+		let ident = format!("warpforge-{random_suffix}");
+
+		let bundle_path = self.executor.ersatz_dir.join(&ident);
+		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
+			msg: "failed to parse image reference".into(),
+			cause: Box::new(err),
+		})?;
+		unpack(&reference, &RegistryAuth::Anonymous, &bundle_path)
+			.await
+			.map_err(|err| Error::SystemSetupError {
+				msg: "failed to obtain image".into(),
+				cause: Box::new(err),
+			})?;
+
+		let params = ContainerParams {
+			ident,
+			runtime: context.runtime.clone(),
+			command,
+			mounts,
+			environment,
+			root_path: bundle_path.join("rootfs"),
+		};
+
+		self.executor.run(&params, outbox).await
+	}
+
+	/// Create all input mounts and collect environment variable inputs.
+	fn setup_inputs(
+		&self,
+		formula_inputs: IndexMap<SandboxPort, FormulaInput>,
+		context: &Context,
+	) -> Result<(IndexMap<String, MountSpec>, IndexMap<String, String>)> {
+		let mut mounts = IndexMap::new();
+		let mut environment = IndexMap::new();
+
+		for (formula::SandboxPort(port), input) in formula_inputs {
 			//TODO implement the FormulaInputComplex filter thing
 			match port.get(..1) {
 				// TODO replace this with a catverter macro
@@ -210,42 +263,59 @@ impl Formula {
 			}
 		}
 
-		// Handle Actions
-		use warpforge_api::formula::Action;
-		let command: Vec<String> = match &formula.action {
-			Action::Echo => vec![
-				"echo".to_string(),
-				"what is the \"Echo\" Action for?".to_string(),
-			]
-			.to_owned(),
-			Action::Execute(a) => a.command.to_owned(),
-			Action::Script(a) => self.setup_script(context, a, &mut mounts)?,
-		};
+		Ok((mounts, environment))
+	}
 
-		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
-		let ident = format!("warpforge-{random_suffix}");
+	/// Create writable mounts for all outputs.
+	fn setup_outputs(
+		&self,
+		formula_outputs: IndexMap<LocalLabel, GatherDirective>,
+		mounts: &mut IndexMap<String, MountSpec>,
+		context: &Context,
+	) -> Result<Vec<(String, PathBuf)>> {
+		let mut outputs = Vec::new();
+		let outputs_dir = self.executor.ersatz_dir.join("outputs");
+		for output in formula_outputs {
+			let (
+				LocalLabel(name),
+				GatherDirective {
+					from: SandboxPort(port),
+					packtype,
+				},
+			) = output;
 
-		let bundle_path = self.executor.ersatz_dir.join(&ident);
-		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
-			msg: "failed to parse image reference".into(),
-			cause: Box::new(err),
-		})?;
-		unpack(&reference, &RegistryAuth::Anonymous, &bundle_path)
-			.await
-			.map_err(|err| Error::SystemSetupError {
-				msg: "failed to obtain image".into(),
+			if !port.starts_with('/') {
+				let msg = format!("formula output '{name}': 'from' has to contain absolute path");
+				return Err(Error::SystemSetupCauseless { msg });
+			}
+
+			if mounts.contains_key(&port) {
+				let msg = format!("formula output '{name}': duplicate mount path '{port}'");
+				return Err(Error::SystemSetupCauseless { msg });
+			}
+
+			let packtype = packtype
+				.map(|Packtype(p)| p)
+				.unwrap_or_else(|| "tar".into());
+
+			if packtype != "tar" {
+				let msg = format!(
+					"formula output '{name}': unsupported packtype (allowed values: 'tar')"
+				);
+				return Err(Error::SystemSetupCauseless { msg });
+			}
+
+			let output_dir = outputs_dir.join(&name);
+			fs::create_dir_all(&output_dir).map_err(|err| Error::SystemSetupError {
+				msg: format!("formula output '{name}': failed to create output directory"),
 				cause: Box::new(err),
 			})?;
 
-		let params = ContainerParams {
-			ident,
-			runtime: context.runtime.clone(),
-			command,
-			mounts,
-			environment,
-			root_path: bundle_path.join("rootfs"),
-		};
+			let mount_spec = MountSpec::new_bind(context, &output_dir, &port, false)?;
+			mounts.insert(port, mount_spec);
+			outputs.push((name, output_dir));
+		}
 
-		self.executor.run(&params, outbox).await
+		Ok(outputs)
 	}
 }

@@ -23,9 +23,9 @@ pub enum ContentRef {
 	catverters_derive::Stringoid,
 )]
 pub struct WareID {
-	packtype: Packtype,
-	hash: String,
+	pub packtype: Packtype,
+	pub hash: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
-pub struct Packtype(String);
+pub struct Packtype(pub String);
