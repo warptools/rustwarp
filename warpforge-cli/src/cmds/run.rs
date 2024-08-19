@@ -80,6 +80,7 @@ async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error>
 	let context = Context {
 		runtime: cmd.runtime.to_owned(),
 		mount_path: Some(parent),
+		..Default::default()
 	};
 	Ok(run_formula(formula, &context).await?)
 }

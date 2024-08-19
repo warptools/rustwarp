@@ -2,8 +2,8 @@ use indexmap::IndexMap;
 use oci_client::secrets::RegistryAuth;
 use oci_unpack::unpack;
 use rand::distributions::{Alphanumeric, DistString};
-use std::fs;
-use std::io::Write;
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use warpforge_api::content::Packtype;
@@ -18,8 +18,14 @@ use crate::events::EventBody;
 use crate::execute::Executor;
 use crate::{ContainerParams, Error, Event, MountSpec, Result};
 
-pub struct Formula {
+pub struct Formula<'a> {
 	pub(crate) executor: Executor,
+	pub(crate) context: &'a Context,
+}
+
+struct IntermediateOutput {
+	name: String,
+	host_path: PathBuf,
 }
 
 pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<()> {
@@ -33,6 +39,7 @@ pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Resul
 			ersatz_dir: temporary_dir.path().join("run"),
 			log_file: temporary_dir.path().join("log"), // TODO: Find a better more persistent location for logs.
 		},
+		context,
 	};
 
 	let (event_sender, mut event_receiver) = mpsc::channel::<Event>(32);
@@ -48,7 +55,7 @@ pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Resul
 		None
 	});
 
-	executor.run(formula, context, event_sender).await?;
+	executor.run(formula, event_sender).await?;
 
 	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
 		msg: "unexpected error while running container".into(),
@@ -63,7 +70,7 @@ pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Resul
 	}
 }
 
-impl Formula {
+impl<'a> Formula<'a> {
 	const CONTAINER_BASE_PATH: &'static str = "/.warpforge.container";
 
 	pub fn container_script_path() -> PathBuf {
@@ -72,7 +79,6 @@ impl Formula {
 
 	pub fn setup_script(
 		&self,
-		context: &Context,
 		script: &ActionScript,
 		mounts: &mut IndexMap<String, MountSpec>,
 	) -> Result<Vec<String>> {
@@ -137,32 +143,28 @@ impl Formula {
 		}
 
 		// mount the script into the container
+		let script_path = Self::container_script_path();
 		mounts.insert(
-			Self::container_script_path().to_str().unwrap().into(),
-			MountSpec::new_bind(context, &script_dir, Self::container_script_path(), false)?,
+			script_path.to_str().unwrap().into(),
+			MountSpec::new_bind(self.context, &script_dir, &script_path, false)?,
 		);
 
 		Ok(vec![
 			script.interpreter.to_owned(),
-			Self::container_script_path()
-				.join("run")
-				.to_str()
-				.unwrap()
-				.to_string(),
+			script_path.join("run").to_str().unwrap().to_string(),
 		])
 	}
 
 	pub async fn run(
 		&self,
 		formula_and_context: warpforge_api::formula::FormulaAndContext,
-		context: &Context,
 		outbox: tokio::sync::mpsc::Sender<Event>,
 	) -> Result<()> {
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
-		let (mut mounts, environment) = self.setup_inputs(formula.inputs, context)?;
+		let (mut mounts, environment) = self.setup_inputs(formula.inputs)?;
 
-		let _outputs = self.setup_outputs(formula.outputs, &mut mounts, context)?;
+		let outputs = self.setup_outputs(formula.outputs, &mut mounts)?;
 
 		// Handle Actions
 		use warpforge_api::formula::Action;
@@ -173,7 +175,7 @@ impl Formula {
 			]
 			.to_owned(),
 			Action::Execute(a) => a.command.to_owned(),
-			Action::Script(a) => self.setup_script(context, a, &mut mounts)?,
+			Action::Script(a) => self.setup_script(a, &mut mounts)?,
 		};
 
 		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
@@ -193,21 +195,24 @@ impl Formula {
 
 		let params = ContainerParams {
 			ident,
-			runtime: context.runtime.clone(),
+			runtime: self.context.runtime.clone(),
 			command,
 			mounts,
 			environment,
 			root_path: bundle_path.join("rootfs"),
 		};
 
-		self.executor.run(&params, outbox).await
+		self.executor.run(&params, outbox).await?;
+
+		self.pack_outputs(&outputs)?;
+
+		Ok(())
 	}
 
 	/// Create all input mounts and collect environment variable inputs.
 	fn setup_inputs(
 		&self,
 		formula_inputs: IndexMap<SandboxPort, FormulaInput>,
-		context: &Context,
 	) -> Result<(IndexMap<String, MountSpec>, IndexMap<String, String>)> {
 		let mut mounts = IndexMap::new();
 		let mut environment = IndexMap::new();
@@ -237,17 +242,19 @@ impl Formula {
 					match input {
 						FormulaInput::Ware(_ware_id) => todo!(),
 						FormulaInput::Mount(Mount::ReadOnly(host_path)) => {
-							let mount_spec = MountSpec::new_bind(context, host_path, &port, true)?;
+							let mount_spec =
+								MountSpec::new_bind(self.context, host_path, &port, true)?;
 							mounts.insert(port, mount_spec);
 						}
 						FormulaInput::Mount(Mount::ReadWrite(host_path)) => {
-							let mount_spec = MountSpec::new_bind(context, host_path, &port, false)?;
+							let mount_spec =
+								MountSpec::new_bind(self.context, host_path, &port, false)?;
 							mounts.insert(port, mount_spec);
 						}
 						FormulaInput::Mount(Mount::Overlay(host_path)) => {
 							let run_dir = &self.executor.ersatz_dir;
 							let mount_spec =
-								MountSpec::new_overlayfs(context, host_path, &port, run_dir)?;
+								MountSpec::new_overlayfs(self.context, host_path, &port, run_dir)?;
 							mounts.insert(port, mount_spec);
 						}
 						FormulaInput::Literal(_) => {
@@ -271,8 +278,7 @@ impl Formula {
 		&self,
 		formula_outputs: IndexMap<LocalLabel, GatherDirective>,
 		mounts: &mut IndexMap<String, MountSpec>,
-		context: &Context,
-	) -> Result<Vec<(String, PathBuf)>> {
+	) -> Result<Vec<IntermediateOutput>> {
 		let mut outputs = Vec::new();
 		let outputs_dir = self.executor.ersatz_dir.join("outputs");
 		for output in formula_outputs {
@@ -311,11 +317,45 @@ impl Formula {
 				cause: Box::new(err),
 			})?;
 
-			let mount_spec = MountSpec::new_bind(context, &output_dir, &port, false)?;
+			let mount_spec = MountSpec::new_bind(self.context, &output_dir, &port, false)?;
 			mounts.insert(port, mount_spec);
-			outputs.push((name, output_dir));
+			outputs.push(IntermediateOutput {
+				name,
+				host_path: output_dir,
+			});
 		}
 
 		Ok(outputs)
+	}
+
+	fn pack_outputs(&self, outputs: &[IntermediateOutput]) -> Result<()> {
+		// TODO: In the future we probably want to add the blobs to some kind of warehouse.
+
+		let packed_dir = self.context.output_path.clone().unwrap_or_default();
+		fs::create_dir_all(&packed_dir).map_err(|err| Error::SystemRuntimeError {
+			msg: "failed to create directory".into(),
+			cause: Box::new(err),
+		})?;
+
+		for IntermediateOutput { name, host_path } in outputs {
+			let writer = File::create(packed_dir.join(name))
+				.map(BufWriter::new)
+				.map_err(|err| Error::SystemRuntimeError {
+					msg: "failed to create output file".into(),
+					cause: Box::new(err),
+				})?;
+
+			// TODO: Compute hash of output tar-archive.
+			let mut archive = tar::Builder::new(writer);
+			archive
+				.append_dir_all("", host_path)
+				.and_then(|_| archive.finish())
+				.map_err(|err| Error::SystemRuntimeError {
+					msg: "failed to pack output".into(),
+					cause: Box::new(err),
+				})?;
+		}
+
+		Ok(())
 	}
 }

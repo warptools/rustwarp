@@ -17,6 +17,7 @@ json-patch.workspace = true
 syscalls.workspace = true
 rand.workspace = true
 oci-client.workspace = true
+tar.workspace = true
 
 tempfile = "*"
 

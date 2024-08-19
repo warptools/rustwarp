@@ -40,7 +40,7 @@ async fn run_formula_collect_output(
 	};
 	let (gather_chan, mut gather_chan_recv) = mpsc::channel::<Event>(32);
 
-	let formula = Formula { executor };
+	let formula = Formula { executor, context };
 
 	let gather_handle = tokio::spawn(async move {
 		let mut outputs = Vec::new();
@@ -62,9 +62,7 @@ async fn run_formula_collect_output(
 		RunOutput { exit_code, outputs }
 	});
 
-	formula
-		.run(formula_and_context, context, gather_chan)
-		.await?;
+	formula.run(formula_and_context, gather_chan).await?;
 
 	Ok(gather_handle.await.expect("gathering events failed"))
 }

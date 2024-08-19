@@ -6,7 +6,6 @@ edition.workspace = true
 [dependencies]
 oci-spec = "*"
 file-mode = "*"
-tar = "*"
 flate2 = "*"
 filetime = "*"
 
@@ -15,6 +14,7 @@ thiserror.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+tar.workspace = true
 
 [dev-dependencies]
 # Used for example binary.

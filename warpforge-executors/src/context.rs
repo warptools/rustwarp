@@ -10,4 +10,9 @@ pub struct Context {
 	///
 	/// If no [Self::mount_path] is configured, the formula must not use relative mount paths.
 	pub mount_path: Option<PathBuf>,
+
+	/// Path where outputs of a formula will be emitted.
+	///
+	/// If no path is provided, the outputs will be created in the working directory.
+	pub output_path: Option<PathBuf>,
 }
