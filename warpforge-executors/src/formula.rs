@@ -16,7 +16,7 @@ use warpforge_terminal::logln;
 use crate::context::Context;
 use crate::events::EventBody;
 use crate::execute::Executor;
-use crate::{ContainerParams, Error, Event, MountSpec, Result};
+use crate::{to_string_or_panic, ContainerParams, Error, Event, MountSpec, Result};
 
 pub struct Formula<'a> {
 	pub(crate) executor: Executor,
@@ -145,13 +145,13 @@ impl<'a> Formula<'a> {
 		// mount the script into the container
 		let script_path = Self::container_script_path();
 		mounts.insert(
-			script_path.to_str().unwrap().into(),
+			to_string_or_panic(&script_path),
 			MountSpec::new_bind(self.context, &script_dir, &script_path, false)?,
 		);
 
 		Ok(vec![
 			script.interpreter.to_owned(),
-			script_path.join("run").to_str().unwrap().to_string(),
+			to_string_or_panic(script_path.join("run")),
 		])
 	}
 
