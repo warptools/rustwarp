@@ -41,7 +41,7 @@ async fn formula_exec_runc_it_works() {
 
 	assert_eq!(result.exit_code, Some(0));
 	assert_eq!(
-		result.outputs,
+		result.console,
 		vec![RunOutputLine {
 			channel: 1,
 			line: "hello from warpforge!".into(),
@@ -85,7 +85,7 @@ async fn formula_script_runc_it_works() {
 
 	assert_eq!(result.exit_code, Some(0));
 	assert_eq!(
-		result.outputs,
+		result.console,
 		vec![RunOutputLine {
 			channel: 1,
 			line: "hello, this is a script action".into(),

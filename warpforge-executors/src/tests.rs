@@ -3,7 +3,7 @@ use tokio::sync::mpsc;
 use warpforge_api::formula::FormulaAndContext;
 
 use crate::{
-	context::Context, events::EventBody, execute::Executor, formula::Formula, Event, Result,
+	context::Context, events::EventBody, execute::Executor, formula::Formula, Event, Output, Result,
 };
 
 mod mount_overlayfs;
@@ -14,7 +14,8 @@ mod simple_mount;
 #[derive(PartialEq, Debug)]
 struct RunOutput {
 	exit_code: Option<i32>,
-	outputs: Vec<RunOutputLine>,
+	console: Vec<RunOutputLine>,
+	outputs: Vec<Output>,
 }
 
 #[derive(PartialEq, Debug)]
@@ -60,10 +61,16 @@ async fn run_formula_collect_output(
 			};
 		}
 
-		RunOutput { exit_code, outputs }
+		RunOutput {
+			exit_code,
+			console: outputs,
+			outputs: Vec::with_capacity(0),
+		}
 	});
 
-	formula.run(formula_and_context, gather_chan).await?;
+	let outputs = formula.run(formula_and_context, gather_chan).await?;
 
-	Ok(gather_handle.await.expect("gathering events failed"))
+	let mut run_output = gather_handle.await.expect("gathering events failed");
+	run_output.outputs = outputs;
+	Ok(run_output)
 }

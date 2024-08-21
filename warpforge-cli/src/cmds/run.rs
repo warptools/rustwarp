@@ -6,7 +6,8 @@ use std::{
 };
 
 use warpforge_api::{constants::MAGIC_FILENAME_MODULE, formula::FormulaAndContext};
-use warpforge_executors::{context::Context, formula::run_formula};
+use warpforge_executors::{context::Context, formula::run_formula, Digest};
+use warpforge_terminal::logln;
 
 use crate::{cmds::Root, Error};
 
@@ -82,5 +83,15 @@ async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error>
 		mount_path: Some(parent),
 		..Default::default()
 	};
-	Ok(run_formula(formula, &context).await?)
+	let outputs = run_formula(formula, &context).await?;
+
+	for output in outputs {
+		let warpforge_executors::Output {
+			name,
+			digest: Digest::Sha384(digest),
+		} = output;
+		logln!("sha384:{digest} {name}");
+	}
+
+	Ok(())
 }

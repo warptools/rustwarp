@@ -5,7 +5,10 @@ use tar::Archive;
 use tempfile::TempDir;
 use warpforge_api::formula::FormulaAndContext;
 
-use crate::tests::{default_context, run_formula_collect_output};
+use crate::{
+	tests::{default_context, run_formula_collect_output},
+	Digest, Output,
+};
 
 #[tokio::test]
 async fn formula_exec_runc_output() {
@@ -51,9 +54,13 @@ async fn formula_exec_runc_output() {
 		.unwrap();
 
 	assert_eq!(result.exit_code, Some(0));
-	let reader = File::open(temp_dir.path().join("output.tar")).unwrap();
+	assert_eq!(result.outputs, vec![Output {
+		name: "output.tar".into(),
+		digest: Digest::Sha384("39906bae799176280345a22a29458b2567f6a1ca373c5483d4cbae0fb0c224c519727f83f7beadf9f7b85731668ad2a1".into())
+	}]);
 
 	// Unpack output.tar and check contents.
+	let reader = File::open(temp_dir.path().join("output.tar")).unwrap();
 	let mut archive = Archive::new(reader);
 	let mut entries = archive.entries().unwrap();
 	let mut entry = entries.next().unwrap().unwrap();

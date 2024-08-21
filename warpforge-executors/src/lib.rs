@@ -35,6 +35,17 @@ pub struct ContainerParams {
 	root_path: PathBuf,
 }
 
+#[derive(PartialEq, Hash, Clone, Debug)]
+pub struct Output {
+	pub name: String,
+	pub digest: Digest,
+}
+
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
+pub enum Digest {
+	Sha384(String),
+}
+
 pub struct MountSpec {
 	/// The destination mount path.  Should be absolute.
 	destination: String,

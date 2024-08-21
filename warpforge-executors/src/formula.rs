@@ -1,14 +1,17 @@
 use indexmap::IndexMap;
 use oci_client::secrets::RegistryAuth;
+use oci_unpack::tee::WriteExt;
 use oci_unpack::unpack;
 use rand::distributions::{Alphanumeric, DistString};
+use sha2::{Digest, Sha384};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use tokio::sync::mpsc;
 use warpforge_api::content::Packtype;
 use warpforge_api::formula::{
-	self, ActionScript, FormulaAndContext, FormulaInput, GatherDirective, Mount, SandboxPort,
+	self, Action, ActionScript, FormulaAndContext, FormulaInput, GatherDirective, Mount,
+	SandboxPort,
 };
 use warpforge_api::plot::LocalLabel;
 use warpforge_terminal::logln;
@@ -16,7 +19,7 @@ use warpforge_terminal::logln;
 use crate::context::Context;
 use crate::events::EventBody;
 use crate::execute::Executor;
-use crate::{to_string_or_panic, ContainerParams, Error, Event, MountSpec, Result};
+use crate::{to_string_or_panic, ContainerParams, Error, Event, MountSpec, Output, Result};
 
 pub struct Formula<'a> {
 	pub(crate) executor: Executor,
@@ -28,7 +31,7 @@ struct IntermediateOutput {
 	host_path: PathBuf,
 }
 
-pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<()> {
+pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<Vec<Output>> {
 	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
 		msg: "failed to setup temporary dir".into(),
 		cause: Box::new(err),
@@ -55,14 +58,14 @@ pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Resul
 		None
 	});
 
-	executor.run(formula, event_sender).await?;
+	let outputs = executor.run(formula, event_sender).await?;
 
 	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
 		msg: "unexpected error while running container".into(),
 		cause: Box::new(e),
 	})?;
 	match exit_code {
-		Some(0) => Ok(()),
+		Some(0) => Ok(outputs),
 		_ => Err(Error::SystemRuntimeError {
 			msg: "container terminated non-zero exit code".into(),
 			cause: exit_code.map_or_else(|| "None".into(), |code| format!("{code}").into()),
@@ -157,9 +160,9 @@ impl<'a> Formula<'a> {
 
 	pub async fn run(
 		&self,
-		formula_and_context: warpforge_api::formula::FormulaAndContext,
-		outbox: tokio::sync::mpsc::Sender<Event>,
-	) -> Result<()> {
+		formula_and_context: FormulaAndContext,
+		outbox: mpsc::Sender<Event>,
+	) -> Result<Vec<Output>> {
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
 		let (mut mounts, environment) = self.setup_inputs(formula.inputs)?;
@@ -167,7 +170,6 @@ impl<'a> Formula<'a> {
 		let outputs = self.setup_outputs(formula.outputs, &mut mounts)?;
 
 		// Handle Actions
-		use warpforge_api::formula::Action;
 		let command: Vec<String> = match &formula.action {
 			Action::Echo => vec![
 				"echo".to_string(),
@@ -204,9 +206,7 @@ impl<'a> Formula<'a> {
 
 		self.executor.run(&params, outbox).await?;
 
-		self.pack_outputs(&outputs)?;
-
-		Ok(())
+		self.pack_outputs(&outputs)
 	}
 
 	/// Create all input mounts and collect environment variable inputs.
@@ -328,8 +328,13 @@ impl<'a> Formula<'a> {
 		Ok(outputs)
 	}
 
-	fn pack_outputs(&self, outputs: &[IntermediateOutput]) -> Result<()> {
+	fn pack_outputs(&self, outputs: &[IntermediateOutput]) -> Result<Vec<Output>> {
+		if outputs.is_empty() {
+			return Ok(Vec::with_capacity(0)); // exit early without allocations.
+		}
 		// TODO: In the future we probably want to add the blobs to some kind of warehouse.
+
+		let mut results = Vec::new();
 
 		let packed_dir = self.context.output_path.clone().unwrap_or_default();
 		fs::create_dir_all(&packed_dir).map_err(|err| Error::SystemRuntimeError {
@@ -345,8 +350,11 @@ impl<'a> Formula<'a> {
 					cause: Box::new(err),
 				})?;
 
-			// TODO: Compute hash of output tar-archive.
+			let mut digester = Sha384::new();
+			let writer = writer.tee(&mut digester);
+
 			let mut archive = tar::Builder::new(writer);
+			archive.mode(tar::HeaderMode::Deterministic);
 			archive
 				.append_dir_all("", host_path)
 				.and_then(|_| archive.finish())
@@ -354,8 +362,14 @@ impl<'a> Formula<'a> {
 					msg: "failed to pack output".into(),
 					cause: Box::new(err),
 				})?;
+
+			drop(archive);
+			results.push(Output {
+				name: name.to_owned(),
+				digest: crate::Digest::Sha384(format!("{:x}", digester.finalize())),
+			});
 		}
 
-		Ok(())
+		Ok(results)
 	}
 }

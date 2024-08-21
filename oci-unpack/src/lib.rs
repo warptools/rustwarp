@@ -10,7 +10,7 @@
 //! [oci-client]: https://github.com/oras-project/rust-oci-client
 //! [umoci]: https://github.com/opencontainers/umoci/blob/8e665b719d0aff18dbf97a287f78faa6d0ef4f18/unpack.go
 
-pub(crate) mod tee;
+pub mod tee;
 
 use std::{
 	fs::{self},
