@@ -160,3 +160,39 @@ impl Logger {
 			.map_err(|e| Error::ChannelInternal { input: e.0 })
 	}
 }
+
+pub async fn set_upper(name: impl Into<String>) {
+	if let Some(logger) = Logger::get_global() {
+		logger.set_upper(name).await.unwrap();
+	}
+}
+
+pub async fn set_lower(name: impl Into<String>) {
+	if let Some(logger) = Logger::get_global() {
+		logger.set_lower(name).await.unwrap();
+	}
+}
+
+pub async fn set_upper_position(position: u64) {
+	if let Some(logger) = Logger::get_global() {
+		logger.set_upper_position(position).await.unwrap();
+	}
+}
+
+pub async fn set_lower_position(position: u64) {
+	if let Some(logger) = Logger::get_global() {
+		logger.set_lower_position(position).await.unwrap();
+	}
+}
+
+pub async fn set_upper_max(max: u64) {
+	if let Some(logger) = Logger::get_global() {
+		logger.set_upper_max(max).await.unwrap();
+	}
+}
+
+pub async fn set_lower_max(max: u64) {
+	if let Some(logger) = Logger::get_global() {
+		logger.set_lower_max(max).await.unwrap();
+	}
+}

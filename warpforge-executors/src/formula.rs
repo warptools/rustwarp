@@ -14,7 +14,7 @@ use warpforge_api::formula::{
 	SandboxPort,
 };
 use warpforge_api::plot::LocalLabel;
-use warpforge_terminal::logln;
+use warpforge_terminal::{logln, set_lower, set_lower_max, set_lower_position};
 
 use crate::context::Context;
 use crate::events::EventBody;
@@ -165,6 +165,10 @@ impl<'a> Formula<'a> {
 	) -> Result<Vec<Output>> {
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
+		set_lower("formula").await;
+		set_lower_max(5).await;
+		set_lower_position(0).await;
+
 		let (mut mounts, environment) = self.setup_inputs(formula.inputs)?;
 
 		let outputs = self.setup_outputs(formula.outputs, &mut mounts)?;
@@ -183,6 +187,8 @@ impl<'a> Formula<'a> {
 		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 		let ident = format!("warpforge-{random_suffix}");
 
+		set_lower_position(1).await;
+
 		let bundle_path = self.executor.ersatz_dir.join(&ident);
 		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
 			msg: "failed to parse image reference".into(),
@@ -195,6 +201,8 @@ impl<'a> Formula<'a> {
 				cause: Box::new(err),
 			})?;
 
+		set_lower_position(3).await;
+
 		let params = ContainerParams {
 			ident,
 			runtime: self.context.runtime.clone(),
@@ -203,8 +211,9 @@ impl<'a> Formula<'a> {
 			environment,
 			root_path: bundle_path.join("rootfs"),
 		};
-
 		self.executor.run(&params, outbox).await?;
+
+		set_lower_position(5).await;
 
 		self.pack_outputs(&outputs)
 	}
