@@ -12,12 +12,13 @@ serde.workspace = true
 serde_with = "*"
 derive_more = "*"
 parse-display.workspace = true
+serde_yml.workspace = true
+itoa.workspace = true
+ryu.workspace = true
 
 [dev-dependencies]
 testfiles-derive = { path = "../testfiles-derive" }
-
 serde_json.workspace = true
-serde_yml.workspace = true
 memchr = "*"
 indoc = "*"
 expect-test.workspace = true

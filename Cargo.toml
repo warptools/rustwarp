@@ -16,6 +16,8 @@ edition = "2021"
 
 [workspace.dependencies]
 thiserror = "*"
+itoa = "*"
+ryu = "*"
 tokio = { version = "*", features = [
   "io-util",
   "macros",
