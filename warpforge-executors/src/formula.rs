@@ -1,7 +1,6 @@
 use indexmap::IndexMap;
-use oci_client::secrets::RegistryAuth;
 use oci_unpack::tee::WriteExt;
-use oci_unpack::unpack;
+use oci_unpack::{pull_and_unpack, PullConfig};
 use rand::distributions::{Alphanumeric, DistString};
 use sha2::{Digest, Sha384};
 use std::fs::{self, File};
@@ -194,7 +193,11 @@ impl<'a> Formula<'a> {
 			msg: "failed to parse image reference".into(),
 			cause: Box::new(err),
 		})?;
-		unpack(&reference, &RegistryAuth::Anonymous, &bundle_path)
+		let pull_config = PullConfig {
+			cache: self.context.image_cache.clone(),
+			..PullConfig::default()
+		};
+		pull_and_unpack(&reference, &bundle_path, &pull_config)
 			.await
 			.map_err(|err| Error::SystemSetupError {
 				msg: "failed to obtain image".into(),

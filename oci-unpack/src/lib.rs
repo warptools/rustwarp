@@ -10,6 +10,9 @@
 //! [oci-client]: https://github.com/oras-project/rust-oci-client
 //! [umoci]: https://github.com/opencontainers/umoci/blob/8e665b719d0aff18dbf97a287f78faa6d0ef4f18/unpack.go
 
+mod cache;
+mod config;
+mod error;
 pub mod tee;
 
 use std::{
@@ -19,6 +22,7 @@ use std::{
 	time::UNIX_EPOCH,
 };
 
+use cache::Cache;
 use file_mode::ModePath;
 use filetime::set_file_times;
 use flate2::read::GzDecoder;
@@ -28,13 +32,14 @@ use oci_client::{
 		OciImageManifest, IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE, IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
 		IMAGE_LAYER_GZIP_MEDIA_TYPE, IMAGE_LAYER_MEDIA_TYPE,
 	},
-	secrets::RegistryAuth,
 	Client, Reference,
 };
 use oci_spec::image::ImageConfiguration;
 use sha2::{Digest, Sha256};
+use tokio::task;
 
-use crate::error::{Error, Result};
+pub use crate::config::PullConfig;
+pub use crate::error::{Error, Result};
 use crate::tee::ReadExt;
 
 // TODO: Consider adding ZSTD support in addition to TAR and GZIP.
@@ -54,11 +59,33 @@ pub struct BundleInfo {
 	pub manifest_digest: String,
 }
 
-pub async fn unpack(
+pub async fn pull_and_unpack(
 	image: &Reference,
-	auth: &RegistryAuth,
 	target: impl AsRef<Path>,
+	config: &PullConfig,
 ) -> Result<BundleInfo> {
+	let image_data = pull_image(image, config).await?;
+
+	let manifest = image_data.manifest.unwrap();
+	let manifest_digest = image_data.digest.unwrap();
+	let config: ImageConfiguration =
+		serde_json::from_slice(&image_data.config.data).map_err(Error::ParseImageConfiguration)?;
+
+	let image_data = ImageData {
+		manifest,
+		manifest_digest,
+		layers: image_data.layers,
+		config,
+	};
+
+	let target = target.as_ref().to_owned();
+	task::spawn_blocking(move || unpack(target, image_data)).await?
+}
+
+pub fn unpack(
+	target: impl AsRef<Path>,
+	image_data: ImageData,
+) -> std::result::Result<BundleInfo, Error> {
 	fs::create_dir_all(&target)?;
 	let is_empty = target.as_ref().read_dir()?.next().is_none();
 	if !is_empty {
@@ -71,8 +98,6 @@ pub async fn unpack(
 	// where an unprivileged user could recurse into an otherwise unsafe image
 	// (giving them potential root access through setuid binaries for example)."
 	target.set_mode(0o700)?;
-
-	let image_data = pull_image(image, auth).await?;
 
 	let rootfs_dir = target.as_ref().join("rootfs");
 	fs::create_dir(&rootfs_dir)?;
@@ -111,28 +136,29 @@ pub async fn unpack(
 	})
 }
 
-struct ImageData {
+pub struct ImageData {
 	manifest: OciImageManifest,
 	manifest_digest: String,
 	layers: Vec<ImageLayer>,
 	config: ImageConfiguration,
 }
 
-async fn pull_image(image: &Reference, auth: &RegistryAuth) -> Result<ImageData> {
+pub async fn pull_image(
+	image: &Reference,
+	config: &PullConfig,
+) -> Result<oci_client::client::ImageData> {
+	let mut cache = Cache::new(config);
+	if let Some(image_data) = cache.before_pull(image).await? {
+		return Ok(image_data);
+	}
+
 	let client = Client::new(ClientConfig::default());
-	let image_data = client.pull(image, auth, LAYER_MEDIA_TYPES.to_vec()).await?;
+	let media_types = LAYER_MEDIA_TYPES.to_vec();
+	let image_data = client.pull(image, &config.auth, media_types).await?;
 
-	let manifest = image_data.manifest.unwrap();
-	let manifest_digest = image_data.digest.unwrap();
-	let config: ImageConfiguration =
-		serde_json::from_slice(&image_data.config.data).map_err(Error::ParseImageConfiguration)?;
+	cache.after_pull(image, &image_data, config).await?;
 
-	Ok(ImageData {
-		manifest,
-		manifest_digest,
-		layers: image_data.layers,
-		config,
-	})
+	Ok(image_data)
 }
 
 fn unpack_layer(layer: &ImageLayer, diff_id: &str, target: impl AsRef<Path>) -> Result<()> {
@@ -177,38 +203,4 @@ fn unpack_layer_tar(data: impl Read, diff_id: &str, target: impl AsRef<Path>) ->
 	}
 
 	Ok(())
-}
-
-pub mod error {
-	pub type Result<T> = std::result::Result<T, Error>;
-
-	#[derive(thiserror::Error, Debug)]
-	pub enum Error {
-		#[error("target directory was not empty")]
-		TargetNotEmpty,
-
-		#[error("failed to download image: {0}")]
-		DownloadFailed(#[from] oci_client::errors::OciDistributionError),
-
-		#[error("invalid image: {0}")]
-		ImageInvalid(String),
-
-		#[error("feature not supported: {0}")]
-		UnsupportedFeature(String),
-
-		#[error("layer tar diff_id mismatch")]
-		LayerDiffIdMismatch,
-
-		#[error("failed to parse image configuration: {0}")]
-		ParseImageConfiguration(serde_json::Error),
-
-		#[error("failed io operation: {0}")]
-		IO(#[from] std::io::Error),
-
-		#[error("failed to chmod: {0}")]
-		ChangeMode(#[from] file_mode::ModeError),
-
-		#[error("config: unsupported rootfs.type: {typ}")]
-		UnsupportedRootFSType { typ: String },
-	}
 }

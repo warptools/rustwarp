@@ -13,6 +13,11 @@ pub struct Context {
 
 	/// Path where outputs of a formula will be emitted.
 	///
-	/// If no path is provided, the outputs will be created in the working directory.
+	/// If no [Self::output_path] is provided, the outputs will be created in the working directory.
 	pub output_path: Option<PathBuf>,
+
+	/// Path to the image cache.
+	///
+	/// If no [Self::image_cache] is specified, images are always pulled freshly from the registry.
+	pub image_cache: Option<PathBuf>,
 }

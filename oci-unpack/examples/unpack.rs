@@ -4,8 +4,7 @@ use std::{
 	process::exit,
 };
 
-use oci_client::secrets::RegistryAuth;
-use oci_unpack::unpack;
+use oci_unpack::{pull_and_unpack, PullConfig};
 
 #[tokio::main]
 async fn main() {
@@ -25,10 +24,9 @@ async fn main() {
 		}
 	};
 
-	let auth = RegistryAuth::Anonymous;
 	let target: PathBuf = args[2].clone().into();
 
-	match unpack(&reference, &auth, &target).await {
+	match pull_and_unpack(&reference, &target, &PullConfig::default()).await {
 		Ok(info) => println!("{:#?}", info.manifest),
 		Err(error) => {
 			eprintln!("unpacking failed: {error}");

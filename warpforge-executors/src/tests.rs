@@ -1,3 +1,5 @@
+use std::{env, path::PathBuf};
+
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 use warpforge_api::formula::FormulaAndContext;
@@ -25,8 +27,10 @@ struct RunOutputLine {
 }
 
 fn default_context() -> Context {
+	let image_cache = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.images");
 	Context {
 		runtime: "runc".into(),
+		image_cache: Some(image_cache),
 		..Default::default()
 	}
 }

@@ -218,9 +218,10 @@ impl Executor {
 
 #[cfg(test)]
 mod tests {
+	use std::path::PathBuf;
+
 	use indexmap::IndexMap;
-	use oci_client::secrets::RegistryAuth;
-	use oci_unpack::unpack;
+	use oci_unpack::{pull_and_unpack, PullConfig};
 	use tempfile::TempDir;
 	use tokio::sync::mpsc;
 
@@ -233,7 +234,11 @@ mod tests {
 
 		let image = &"docker.io/busybox:latest".parse().unwrap();
 		let bundle_path = path.join("bundle");
-		unpack(image, &RegistryAuth::Anonymous, &bundle_path)
+		let pull_config = PullConfig {
+			cache: Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.images")),
+			..Default::default()
+		};
+		pull_and_unpack(image, &bundle_path, &pull_config)
 			.await
 			.unwrap();
 
