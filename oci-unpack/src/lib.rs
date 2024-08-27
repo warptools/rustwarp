@@ -156,7 +156,9 @@ pub async fn pull_image(
 	let media_types = LAYER_MEDIA_TYPES.to_vec();
 	let image_data = client.pull(image, &config.auth, media_types).await?;
 
-	cache.after_pull(image, &image_data, config).await?;
+	cache
+		.after_pull(image, &image_data, &client, config)
+		.await?;
 
 	Ok(image_data)
 }

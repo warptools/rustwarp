@@ -44,4 +44,10 @@ pub enum Error {
 
 	#[error("failed to obtain image cache lock: '{0}'")]
 	CacheLockTimeout(PathBuf),
+
+	#[error("the following digest is not (yet) supported: {digest}")]
+	DigestNotSupported { digest: String },
+
+	#[error("cache blob data did not match digest: {digest}")]
+	CorruptCacheBlob { digest: String },
 }

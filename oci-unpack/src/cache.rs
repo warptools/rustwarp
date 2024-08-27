@@ -10,11 +10,11 @@ use std::{
 use indexmap::{map, IndexMap};
 use oci_client::{
 	client::{ImageData, ImageLayer},
-	manifest::OciImageManifest,
+	manifest::{OciImageManifest, OCI_IMAGE_MEDIA_TYPE},
 	Reference,
 };
-use olpc_cjson::CanonicalFormatter;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::{
 	fs::{self, OpenOptions},
 	io::AsyncWriteExt,
@@ -27,6 +27,8 @@ use crate::{Error, PullConfig, Result};
 const BLOBS_DIR: &str = "blobs";
 const INDEX_FILE: &str = "index.json";
 const LOCK_FILE: &str = "index.lock";
+
+const CACHE_LOCK_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub(crate) struct Cache<'a> {
 	config: &'a PullConfig,
@@ -91,6 +93,7 @@ impl<'a> Cache<'a> {
 		&mut self,
 		image: &Reference,
 		image_data: &ImageData,
+		client: &oci_client::Client,
 		config: &PullConfig,
 	) -> Result<()> {
 		let Some(cache_dir) = &config.cache else {
@@ -98,7 +101,18 @@ impl<'a> Cache<'a> {
 		};
 		assert!(self.has_lock, "should have called before_pull");
 
-		add_image_to_cache(cache_dir, image, image_data).await
+		// Obtain exact manifest bytes, because we need to make sure digest of manifest is correct.
+		let digest = image_data.digest.as_ref().unwrap();
+		let media_type = &image_data.manifest.as_ref().unwrap().media_type;
+		let media_type = media_type.as_ref().map(AsRef::as_ref);
+		let media_type = [media_type.unwrap_or(OCI_IMAGE_MEDIA_TYPE)];
+		let reference = image.clone_with_digest(digest.to_owned());
+		let (manifest_raw, digest_raw) = client
+			.pull_manifest_raw(&reference, &config.auth, &media_type)
+			.await?;
+		assert_eq!(digest, &digest_raw);
+
+		add_image_to_cache(cache_dir, image, image_data, &manifest_raw).await
 	}
 
 	async fn lock_index(&mut self, cache_dir: impl AsRef<Path>) -> Result<()> {
@@ -107,7 +121,7 @@ impl<'a> Cache<'a> {
 		}
 
 		let path = cache_dir.as_ref().join(LOCK_FILE);
-		let deadline = Instant::now() + Duration::from_secs(10);
+		let deadline = Instant::now() + CACHE_LOCK_TIMEOUT;
 
 		loop {
 			match OpenOptions::new()
@@ -188,7 +202,6 @@ async fn image_from_reference(
 }
 
 async fn image_from_blobs(cache_dir: impl AsRef<Path>, manifest_digest: &str) -> Result<ImageData> {
-	// TODO: Should we check digests again here or do we trust the local filesystem?
 	let blob_dir = cache_dir.as_ref().join(BLOBS_DIR);
 
 	let manifest_data = read_blob(&blob_dir, manifest_digest).await?;
@@ -225,15 +238,12 @@ async fn add_image_to_cache(
 	cache_dir: impl AsRef<Path>,
 	image: &Reference,
 	image_data: &ImageData,
+	manifest_raw: &[u8],
 ) -> Result<()> {
 	let blob_dir = cache_dir.as_ref().join(BLOBS_DIR);
 
-	let mut manifest_blob = Vec::new();
-	let mut ser =
-		serde_json::Serializer::with_formatter(&mut manifest_blob, CanonicalFormatter::new());
-	(image_data.manifest.as_ref().unwrap().serialize(&mut ser)).unwrap();
 	let digest = image_data.digest.as_ref().unwrap();
-	add_blob_to_cache(&blob_dir, digest, &manifest_blob[..]).await?;
+	add_blob_to_cache(&blob_dir, digest, manifest_raw).await?;
 
 	let config_digest = &image_data.manifest.as_ref().unwrap().config.digest;
 	add_blob_to_cache(&blob_dir, config_digest, &image_data.config.data[..]).await?;
@@ -263,6 +273,12 @@ async fn add_blob_to_cache(
 	digest: &str,
 	data: impl AsRef<[u8]>,
 ) -> Result<()> {
+	if !digest.starts_with("sha256:") {
+		return Err(Error::DigestNotSupported {
+			digest: digest.to_owned(),
+		});
+	}
+
 	let colon = digest.find(':').unwrap();
 	let blob_path = blob_path(blob_dir, digest, colon);
 	fs::create_dir_all(&blob_path).await?;
@@ -271,7 +287,16 @@ async fn add_blob_to_cache(
 
 async fn read_blob(blob_dir: impl AsRef<Path>, digest: &str) -> Result<Vec<u8>> {
 	let colon = digest.find(':').unwrap();
-	Ok(fs::read(blob_path(blob_dir, digest, colon).join(&digest[colon + 1..])).await?)
+	let data = fs::read(blob_path(blob_dir, digest, colon).join(&digest[colon + 1..])).await?;
+
+	let actual = format!("sha256:{:x}", Sha256::digest(&data));
+	if actual != digest {
+		return Err(Error::CorruptCacheBlob {
+			digest: digest.to_owned(),
+		});
+	}
+
+	Ok(data)
 }
 
 fn blob_path(blob_dir: impl AsRef<Path>, digest: &str, colon: usize) -> PathBuf {

@@ -10,7 +10,6 @@ flate2 = "*"
 filetime = "*"
 # Disable crossbeam-channel to make sure notify will work correctly with tokio.
 notify = { version = "*", default-features = false, features = ["macos_kqueue"] }
-olpc-cjson = "*"
 
 oci-client.workspace = true
 thiserror.workspace = true
