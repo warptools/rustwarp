@@ -10,6 +10,7 @@ mod events;
 pub mod execute;
 pub mod formula;
 mod oci;
+pub mod plot;
 
 #[cfg(test)]
 mod tests;

@@ -3,7 +3,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
-use crate::formula::Mount;
+use crate::formula::{self, Mount};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PlotCapsule {
@@ -13,6 +13,8 @@ pub enum PlotCapsule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Plot {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub image: Option<formula::Image>,
 	pub inputs: IndexMap<LocalLabel, PlotInput>,
 	pub steps: IndexMap<StepName, Step>,
 	pub outputs: IndexMap<LocalLabel, PlotOutput>,
@@ -70,6 +72,7 @@ pub struct GitIngest {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[allow(clippy::large_enum_variant)]
 pub enum Step {
 	#[serde(rename = "plot")]
 	Plot(Plot),
@@ -80,6 +83,8 @@ pub enum Step {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Protoformula {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub image: Option<formula::Image>,
 	pub inputs: IndexMap<crate::formula::SandboxPort, PlotInput>,
 	pub action: crate::formula::Action,
 	pub outputs: IndexMap<LocalLabel, crate::formula::GatherDirective>,

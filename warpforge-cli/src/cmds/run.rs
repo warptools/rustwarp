@@ -5,8 +5,12 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use warpforge_api::{constants::MAGIC_FILENAME_MODULE, formula::FormulaAndContext};
-use warpforge_executors::{context::Context, formula::run_formula, Digest};
+use warpforge_api::{
+	constants::{MAGIC_FILENAME_MODULE, MAGIC_FILENAME_PLOT},
+	formula::FormulaAndContext,
+	plot::PlotCapsule,
+};
+use warpforge_executors::{context::Context, formula::run_formula, plot::run_plot, Digest};
 use warpforge_terminal::logln;
 
 use crate::{cmds::Root, Error};
@@ -24,15 +28,15 @@ pub struct Cmd {
 	pub runtime: PathBuf,
 }
 
-pub async fn execute(cli: &Root, cmd: &Cmd) -> Result<(), Error> {
+pub async fn execute(_cli: &Root, cmd: &Cmd) -> Result<(), Error> {
 	let Some(target) = &cmd.target else {
 		let path = current_dir().map_err(|e| Error::BizarreEnvironment { cause: Box::new(e) })?;
-		return execute_module(cli, &path).await;
+		return execute_module(cmd, &path).await;
 	};
 
 	let meta = fs::metadata(target).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 	if meta.is_dir() {
-		execute_module(cli, target).await
+		execute_module(cmd, target).await
 	} else if meta.is_file() {
 		execute_formula(cmd, target).await
 	} else {
@@ -42,18 +46,35 @@ pub async fn execute(cli: &Root, cmd: &Cmd) -> Result<(), Error> {
 	}
 }
 
-async fn execute_module(_cli: &Root, path: impl AsRef<Path>) -> Result<(), Error> {
+async fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 	if !path.as_ref().join(MAGIC_FILENAME_MODULE).is_file() {
 		return Err(Error::InvalidArguments {
 			cause: format!(
-				"invalid target: directory does not contain file '{}'",
-				MAGIC_FILENAME_MODULE
+				"invalid target: directory does not contain file '{MAGIC_FILENAME_MODULE}'",
 			)
 			.into(),
 		});
 	}
 
-	todo!()
+	let plot_path = path.as_ref().join(MAGIC_FILENAME_PLOT);
+	let file =
+		File::open(&plot_path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
+	let reader = BufReader::new(file);
+	let plot: PlotCapsule =
+		serde_json::from_reader(reader).map_err(|e| Error::InvalidArguments {
+			cause: format!("invalid plot file: {e}").into(),
+		})?;
+
+	let parent = parent(path)?;
+	let context = Context {
+		runtime: cmd.runtime.to_owned(),
+		mount_path: Some(parent),
+		..Default::default()
+	};
+
+	run_plot(plot, &context).await?;
+
+	Ok(())
 }
 
 async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
@@ -64,20 +85,7 @@ async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error>
 			cause: format!("invalid formula file: {e}").into(),
 		})?;
 
-	let parent = if path.as_ref().is_absolute() {
-		path.as_ref().parent().map(ToOwned::to_owned)
-	} else {
-		(path.as_ref().canonicalize())
-			.map_err(|err| Error::BizarreEnvironment {
-				cause: Box::new(err),
-			})?
-			.parent()
-			.map(ToOwned::to_owned)
-	};
-	let parent = parent.ok_or_else(|| Error::BizarreEnvironment {
-		cause: "could not get parent of formula file after successfully reading it".into(), // has to be race condition
-	})?;
-
+	let parent = parent(path)?;
 	let context = Context {
 		runtime: cmd.runtime.to_owned(),
 		mount_path: Some(parent),
@@ -94,4 +102,20 @@ async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error>
 	}
 
 	Ok(())
+}
+
+fn parent(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
+	let parent = if path.as_ref().is_absolute() {
+		path.as_ref().parent().map(ToOwned::to_owned)
+	} else {
+		(path.as_ref().canonicalize())
+			.map_err(|err| Error::BizarreEnvironment {
+				cause: Box::new(err),
+			})?
+			.parent()
+			.map(ToOwned::to_owned)
+	};
+	parent.ok_or_else(|| Error::BizarreEnvironment {
+		cause: "could not get parent after successfully accessing child-path".into(), // has to be race condition
+	})
 }

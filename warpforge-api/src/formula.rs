@@ -41,6 +41,16 @@ pub struct GatherDirective {
 	// filters: Option<FilterMap>,
 }
 
+/// Specifies which image to use to execute the formula.
+///
+/// Not (yet) part of the official specification!
+///
+/// Added because pulling images from a registry seems to make more sense
+/// than generating rootfs ourselves. An [OCI Registry] provides a hash over
+/// the image manifest (which includes hashes to all contents). And we can
+/// pull images by their manifest digest from the registry for replays.
+///
+/// [OCI Registry]: https://github.com/opencontainers/distribution-spec/blob/main/spec.md
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Image {
 	/// OCI Reference to an image. This has to include registry and repository and
@@ -83,16 +93,6 @@ pub enum FormulaCapsule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Formula {
-	/// Specifies which image to use to execute the formula.
-	///
-	/// Not (yet) part of the official specification!
-	///
-	/// Added because pulling images from a registry seems to make more sense
-	/// than generating rootfs ourselves. An [OCI Registry] provides a hash over
-	/// the image manifest (which includes hashes to all contents). And we can
-	/// pull images by their manifest digest from the registry for replays.
-	///
-	/// [OCI Registry]: https://github.com/opencontainers/distribution-spec/blob/main/spec.md
 	pub image: Image,
 	pub inputs: IndexMap<SandboxPort, FormulaInput>,
 	pub action: Action,
