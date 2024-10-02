@@ -62,12 +62,12 @@ impl<'a> PlotGraph<'a> {
 	}
 
 	pub(crate) fn validate(&self) -> Result<()> {
-		self.validate_existing_dependencies()?;
+		self.validate_dependencies_exist()?;
 		self.validate_no_cycles()?;
 		Ok(())
 	}
 
-	pub(crate) fn validate_existing_dependencies(&self) -> Result<()> {
+	pub(crate) fn validate_dependencies_exist(&self) -> Result<()> {
 		for &name in self.children.keys() {
 			if !self.nodes.contains_key(name) {
 				let origin = self.children[name]
@@ -83,8 +83,8 @@ impl<'a> PlotGraph<'a> {
 		Ok(())
 	}
 
+	/// Topological sort to find cycles.
 	pub(crate) fn validate_no_cycles(&self) -> Result<()> {
-		// Topological sort to find cycles.
 		let mut order = Vec::with_capacity(self.nodes.len());
 		let mut parents = self.parents.clone();
 		let mut no_parents = (self.nodes.keys().cloned())

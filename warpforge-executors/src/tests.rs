@@ -8,10 +8,8 @@ use crate::{
 	context::Context, events::EventBody, execute::Executor, formula::Formula, Event, Output, Result,
 };
 
-mod mount_overlayfs;
-mod output;
-mod simple_echo;
-mod simple_mount;
+mod formula;
+mod plot;
 
 #[derive(PartialEq, Debug)]
 struct RunOutput {
