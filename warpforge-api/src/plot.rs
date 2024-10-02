@@ -55,8 +55,8 @@ pub enum PlotOutput {
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub struct Pipe {
-	step_name: String,
-	label: LocalLabel,
+	pub step_name: String,
+	pub label: LocalLabel,
 }
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
