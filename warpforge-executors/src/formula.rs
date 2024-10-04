@@ -5,7 +5,7 @@ use rand::distributions::{Alphanumeric, DistString};
 use sha2::{Digest, Sha384};
 use std::fs::{self, File};
 use std::io::{BufWriter, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 use warpforge_api::content::Packtype;
 use warpforge_api::formula::{
@@ -28,6 +28,12 @@ pub struct Formula<'a> {
 struct IntermediateOutput {
 	name: String,
 	host_path: PathBuf,
+	packtype: OutputPacktype,
+}
+
+enum OutputPacktype {
+	None,
+	Tar,
 }
 
 pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<Vec<Output>> {
@@ -312,16 +318,17 @@ impl<'a> Formula<'a> {
 				return Err(Error::SystemSetupCauseless { msg });
 			}
 
-			let packtype = packtype
-				.map(|Packtype(p)| p)
-				.unwrap_or_else(|| "tar".into());
-
-			if packtype != "tar" {
-				let msg = format!(
-					"formula output '{name}': unsupported packtype (allowed values: 'tar')"
-				);
-				return Err(Error::SystemSetupCauseless { msg });
-			}
+			let packtype = match packtype {
+				None => OutputPacktype::None,
+				Some(Packtype(p)) if p == "none" => OutputPacktype::None,
+				Some(Packtype(p)) if p == "tar" => OutputPacktype::Tar,
+				_ => {
+					let msg = format!(
+						"formula output '{name}': unsupported packtype (allowed values: 'none', 'tar')"
+					);
+					return Err(Error::SystemSetupCauseless { msg });
+				}
+			};
 
 			let output_dir = outputs_dir.join(&name);
 			fs::create_dir_all(&output_dir).map_err(|err| Error::SystemSetupError {
@@ -334,6 +341,7 @@ impl<'a> Formula<'a> {
 			outputs.push(IntermediateOutput {
 				name,
 				host_path: output_dir,
+				packtype,
 			});
 		}
 
@@ -348,40 +356,83 @@ impl<'a> Formula<'a> {
 
 		let mut results = Vec::new();
 
-		let packed_dir = self.context.output_path.clone().unwrap_or_default();
-		fs::create_dir_all(&packed_dir).map_err(|err| Error::SystemRuntimeError {
+		let target_dir = self.context.output_path.clone().unwrap_or_default();
+		fs::create_dir_all(&target_dir).map_err(|err| Error::SystemRuntimeError {
 			msg: "failed to create directory".into(),
 			cause: Box::new(err),
 		})?;
 
-		for IntermediateOutput { name, host_path } in outputs {
-			let writer = File::create(packed_dir.join(name))
-				.map(BufWriter::new)
-				.map_err(|err| Error::SystemRuntimeError {
-					msg: "failed to create output file".into(),
-					cause: Box::new(err),
-				})?;
+		for output in outputs {
+			let IntermediateOutput {
+				name,
+				host_path,
+				packtype,
+			} = output;
 
-			let mut digester = Sha384::new();
-			let writer = writer.tee(&mut digester);
-
-			let mut archive = tar::Builder::new(writer);
-			archive.mode(tar::HeaderMode::Deterministic);
-			archive
-				.append_dir_all("", host_path)
-				.and_then(|_| archive.finish())
-				.map_err(|err| Error::SystemRuntimeError {
-					msg: "failed to pack output".into(),
-					cause: Box::new(err),
-				})?;
-
-			drop(archive);
-			results.push(Output {
-				name: name.to_owned(),
-				digest: crate::Digest::Sha384(format!("{:x}", digester.finalize())),
-			});
+			let output = match packtype {
+				OutputPacktype::None => self.pack_output_dir(name, host_path, &target_dir)?,
+				OutputPacktype::Tar => self.pack_output_tar(name, host_path, &target_dir)?,
+			};
+			results.push(output);
 		}
 
 		Ok(results)
+	}
+
+	fn pack_output_dir(
+		&self,
+		name: &str,
+		source_dir: impl AsRef<Path>,
+		target_dir: impl AsRef<Path>,
+	) -> Result<Output> {
+		let mut digester = Sha384::new();
+		Self::tar_dir(&source_dir, &mut digester)?;
+		let digest = crate::Digest::Sha384(format!("{:x}", digester.finalize()));
+
+		let target_dir = target_dir.as_ref().join(name);
+		// TODO: Handle ErrorKind::CrossesDevices: we should handle move between mounts.
+		fs::rename(source_dir, target_dir).map_err(|err| Error::SystemRuntimeError {
+			msg: "failed to move output dir to target".into(),
+			cause: Box::new(err),
+		})?;
+
+		let name = name.to_owned();
+		Ok(Output { name, digest })
+	}
+
+	fn pack_output_tar(
+		&self,
+		name: &str,
+		source_dir: impl AsRef<Path>,
+		target_dir: impl AsRef<Path>,
+	) -> Result<Output> {
+		let writer = File::create(target_dir.as_ref().join(name))
+			.map(BufWriter::new)
+			.map_err(|err| Error::SystemRuntimeError {
+				msg: "failed to create output file".into(),
+				cause: Box::new(err),
+			})?;
+
+		let mut digester = Sha384::new();
+		let writer = writer.tee(&mut digester);
+
+		Self::tar_dir(source_dir, writer)?;
+
+		Ok(Output {
+			name: name.to_owned(),
+			digest: crate::Digest::Sha384(format!("{:x}", digester.finalize())),
+		})
+	}
+
+	fn tar_dir(source_dir: impl AsRef<Path>, writer: impl Write) -> Result<()> {
+		let mut archive = tar::Builder::new(writer);
+		archive.mode(tar::HeaderMode::Deterministic);
+		archive
+			.append_dir_all("", source_dir)
+			.and_then(|_| archive.finish())
+			.map_err(|err| Error::SystemRuntimeError {
+				msg: "failed to pack output".into(),
+				cause: Box::new(err),
+			})
 	}
 }

@@ -1,14 +1,110 @@
 use indexmap::{IndexMap, IndexSet};
+use tempfile::TempDir;
+use warpforge_api::content::Packtype;
+use warpforge_api::formula::{
+	Formula, FormulaAndContext, FormulaCapsule, FormulaContext, FormulaContextCapsule,
+	FormulaInput, GatherDirective, Mount,
+};
 use warpforge_api::plot::{PlotCapsule, PlotInput, Step, StepName};
 use warpforge_terminal::logln;
 
 use crate::context::Context;
-use crate::{Error, Result};
+use crate::formula::run_formula;
+use crate::{to_string_or_panic, Error, Output, Result};
 
-pub async fn run_plot(plot: PlotCapsule, _context: &Context) -> Result<()> {
+pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
 	let graph = PlotGraph::new(&plot);
 	graph.validate()?;
-	logln!("{graph:#?}");
+
+	let temp_dir = TempDir::new().map_err(|err| Error::SystemSetupError {
+		msg: "failed to setup temporary dir".into(),
+		cause: Box::new(err),
+	})?;
+
+	// TODO: Execute in graph order.
+
+	let PlotCapsule::V1(plot) = &plot;
+	for (StepName(step_name), step) in &plot.steps {
+		let Step::Protoformula(step) = step else {
+			todo!(); // TODO: Implement sub-plots.
+		};
+
+		let step_dir = temp_dir.path().join(step_name);
+		let output_path = Some(step_dir.join("outputs"));
+		let context = Context {
+			output_path,
+			..context.clone()
+		};
+
+		let image = plot.image.as_ref().or(step.image.as_ref());
+		let Some(image) = image else {
+			let msg = format!("invalid plot (step '{step_name}'): image required");
+			return Err(Error::SystemSetupCauseless { msg });
+		};
+
+		let inputs = (step.inputs.iter())
+			.map(|(port, input)| {
+				let input = match input {
+					PlotInput::Mount(mount) => FormulaInput::Mount(mount.to_owned()),
+					PlotInput::Literal(literal) => FormulaInput::Literal(literal.to_owned()),
+					PlotInput::Ware(ware_id) => FormulaInput::Ware(ware_id.to_owned()),
+					PlotInput::Pipe(pipe) => {
+						if pipe.step_name.is_empty() {
+							todo!();
+						}
+						let path = (temp_dir.path())
+							.join(&pipe.step_name)
+							.join("outputs")
+							.join(&pipe.label.0);
+						FormulaInput::Mount(Mount::ReadOnly(to_string_or_panic(path)))
+					}
+					PlotInput::CatalogRef(_catalog_ref) => todo!(),
+					PlotInput::Ingest(_ingest) => todo!(),
+				};
+				(port.to_owned(), input)
+			})
+			.collect::<IndexMap<_, _>>();
+
+		for (_, GatherDirective { packtype, .. }) in &step.outputs {
+			if (packtype.as_ref())
+				.map(|Packtype(p)| p != "none")
+				.unwrap_or(false)
+			{
+				let msg =
+					format!("invalid plot (step '{step_name}'): output packtype has to be 'none'");
+				return Err(Error::SystemSetupCauseless { msg });
+			}
+		}
+
+		let formula = Formula {
+			image: image.clone(),
+			inputs,
+			action: step.action.clone(),
+			outputs: step.outputs.clone(),
+		};
+
+		let formula = FormulaAndContext {
+			formula: FormulaCapsule::V1(formula),
+			context: FormulaContextCapsule::V1(FormulaContext {
+				warehouses: IndexMap::with_capacity(0),
+			}),
+		};
+
+		let outputs = run_formula(formula, &context).await.map_err(|err| {
+			let msg = format!("failed step '{step_name}'");
+			let cause = Box::new(err);
+			Error::SystemRuntimeError { msg, cause }
+		})?;
+
+		logln!("step '{step_name}'");
+		for output in outputs {
+			let Output {
+				name,
+				digest: crate::Digest::Sha384(digest),
+			} = output;
+			logln!("  sha384:{digest} {name}");
+		}
+	}
 
 	Ok(())
 }

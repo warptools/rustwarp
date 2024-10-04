@@ -6,7 +6,6 @@ use str_cat::os_str_cat;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::select;
-use warpforge_terminal::logln;
 
 use crate::{Error, Result};
 
@@ -179,7 +178,6 @@ impl Executor {
 				line = stderr.next_line() => Self::send_container_output(&task.ident, &outbox, 2, line).await?,
 				status = child.wait() => {
 					let status = status.expect("child process encountered an error");
-					logln!("child status was: {}", status);
 					outbox
 						.send(crate::Event {
 							topic: task.ident.to_owned(),

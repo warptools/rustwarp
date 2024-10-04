@@ -26,10 +26,7 @@ fn cyclic_graph() {
 							}
 						},
 						"outputs": {
-							"out": {
-								"from": "/out",
-								"packtype": "tar"
-							}
+							"out": { "from": "/out" }
 						}
 					}
 				},
@@ -47,10 +44,7 @@ fn cyclic_graph() {
 							}
 						},
 						"outputs": {
-							"copied": {
-								"from": "/out",
-								"packtype": "tar"
-							}
+							"copied": { "from": "/out" }
 						}
 					}
 				},
@@ -65,10 +59,7 @@ fn cyclic_graph() {
 							}
 						},
 						"outputs": {
-							"out": {
-								"from": "/out",
-								"packtype": "tar"
-							}
+							"out": { "from": "/out" }
 						}
 					}
 				}
@@ -107,10 +98,7 @@ fn invalid_edges() {
 							}
 						},
 						"outputs": {
-							"out": {
-								"from": "/out",
-								"packtype": "tar"
-							}
+							"out": { "from": "/out" }
 						}
 					}
 				},
@@ -129,10 +117,7 @@ fn invalid_edges() {
 							}
 						},
 						"outputs": {
-							"copied": {
-								"from": "/out",
-								"packtype": "tar"
-							}
+							"copied": { "from": "/out" }
 						}
 					}
 				},
@@ -148,10 +133,7 @@ fn invalid_edges() {
 							}
 						},
 						"outputs": {
-							"out": {
-								"from": "/out",
-								"packtype": "tar"
-							}
+							"out": { "from": "/out" }
 						}
 					}
 				}
