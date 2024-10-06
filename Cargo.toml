@@ -9,6 +9,7 @@ members = [
     "catverters",
     "catverters-derive",
     "testfiles-derive",
+    "warpscript",
 ]
 
 [workspace.package]
