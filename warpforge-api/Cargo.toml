@@ -7,10 +7,10 @@ edition = "2021"
 catverters = { path = "../catverters" }
 catverters-derive = { path = "../catverters-derive" }
 
+derive_more = { version = "*", features = ["from_str", "display"] }
 indexmap.workspace = true
 serde.workspace = true
 serde_with = "*"
-derive_more = "*"
 
 [dev-dependencies]
 testfiles-derive = { path = "../testfiles-derive" }

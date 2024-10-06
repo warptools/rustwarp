@@ -4,15 +4,13 @@
 // TODO: Remove the following line when cleaning up the code.
 #![allow(dead_code)]
 
+use indexmap::IndexMap;
+use reqwest::StatusCode;
+use reqwest::Url;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::fmt::Display;
 use std::fmt::Formatter;
-
-use derive_more::Display;
-use indexmap::IndexMap;
-use reqwest::StatusCode;
-use reqwest::Url;
 
 use warpforge_api::plot::Plot;
 use warpforge_api::plot::PlotCapsule;
@@ -52,56 +50,56 @@ pub(crate) struct Edge {
 	pub(crate) attributes: Vec<EdgeAttribute>,
 }
 
-#[derive(Clone, Debug, Display)]
+#[derive(Clone, Debug, derive_more::Display)]
 pub(crate) enum NodeAttribute {
-	#[display(fmt = "[label=\"{}\"]", _0)]
+	#[display("[label=\"{}\"]", _0)]
 	Label(String),
 
-	#[display(fmt = "[shape={}]", _0)]
+	#[display("[shape={}]", _0)]
 	Shape(NodeShape),
 
-	#[display(fmt = "[color={0},fontcolor={0}]", _0)]
+	#[display("[color={0},fontcolor={0}]", _0)]
 	Color(String),
 }
 
 // For more shapes see: https://graphviz.org/doc/info/shapes.html
-#[derive(Clone, Debug, Display)]
+#[derive(Clone, Debug, derive_more::Display)]
 pub(crate) enum NodeShape {
-	#[display(fmt = "box")]
+	#[display("box")]
 	Box,
 
-	#[display(fmt = "ellipse")]
+	#[display("ellipse")]
 	Ellipse,
 
-	#[display(fmt = "diamond")]
+	#[display("diamond")]
 	Diamond,
 }
 
-#[derive(Clone, Debug, Display)]
+#[derive(Clone, Debug, derive_more::Display)]
 pub(crate) enum EdgeAttribute {
-	#[display(fmt = "[label=\"{}\"]", _0)]
+	#[display("[label=\"{}\"]", _0)]
 	Label(String),
 
-	#[display(fmt = "[arrowhead={}]", _0)]
+	#[display("[arrowhead={}]", _0)]
 	Arrow(ArrowType),
 
-	#[display(fmt = "[constraint={}]", _0)]
+	#[display("[constraint={}]", _0)]
 	Constraint(bool),
 }
 
 // For more arrow types see: https://graphviz.org/docs/attr-types/arrowType/
-#[derive(Clone, Debug, Display)]
+#[derive(Clone, Debug, derive_more::Display)]
 pub(crate) enum ArrowType {
-	#[display(fmt = "normal")]
+	#[display("normal")]
 	Normal,
 
-	#[display(fmt = "none")]
+	#[display("none")]
 	None,
 
-	#[display(fmt = "empty")]
+	#[display("empty")]
 	Empty,
 
-	#[display(fmt = "open")]
+	#[display("open")]
 	Open,
 }
 
@@ -225,7 +223,9 @@ impl Graphable for Plot {
 		for (label, step) in &self.steps {
 			let mut subgraph = Graph::default();
 			let step_label = label.0.to_string();
-			let Step::Protoformula(formula) = step else { unimplemented!() }; // TODO
+			let Step::Protoformula(formula) = step else {
+				unimplemented!()
+			}; // TODO
 			for (target, input) in &formula.inputs {
 				if let PlotInput::Pipe(_) = input {
 					let input_target_id = format!("{step_label}{}", target.0);
@@ -281,7 +281,9 @@ pub(crate) fn fetch_warpsys_plot_recursively(
 	let mut next_packages = VecDeque::new();
 	next_packages.push_back(package.to_string());
 	loop {
-		let Some(package) = next_packages.pop_front() else { break; };
+		let Some(package) = next_packages.pop_front() else {
+			break;
+		};
 		if result.contains_key(&package) || failed.contains(&package) {
 			continue;
 		}
@@ -292,7 +294,9 @@ pub(crate) fn fetch_warpsys_plot_recursively(
 		};
 
 		for (_, input) in &plot.inputs {
-			let Some(other_package) = package_name(input) else { continue; };
+			let Some(other_package) = package_name(input) else {
+				continue;
+			};
 			if !result.contains_key(other_package) {
 				next_packages.push_back(other_package.to_string());
 			}
@@ -310,8 +314,12 @@ pub(crate) fn fetch_warpsys_plot_recursively(
 }
 
 fn package_name(input: &PlotInput) -> Option<&str> {
-	let PlotInput::CatalogRef(catalog) = input else { return None; };
-	let Some(mut url) = catalog.module_name.0.strip_prefix(WARPSYS_CATALOG_DOMAIN) else { return None; };
+	let PlotInput::CatalogRef(catalog) = input else {
+		return None;
+	};
+	let Some(mut url) = catalog.module_name.0.strip_prefix(WARPSYS_CATALOG_DOMAIN) else {
+		return None;
+	};
 	while let Some(stripped) = url.strip_prefix('/') {
 		url = stripped;
 	}
@@ -326,17 +334,23 @@ pub(crate) fn create_graph(plots: &IndexMap<String, Plot>, package: &str) -> Gra
 	let mut visited = HashSet::new();
 
 	loop {
-		let Some(package) = next_packages.pop_front() else { break; };
+		let Some(package) = next_packages.pop_front() else {
+			break;
+		};
 		if visited.contains(&package) {
 			continue;
 		}
 		visited.insert(package.clone());
-		let Some(plot) = plots.get(&package) else { continue; };
+		let Some(plot) = plots.get(&package) else {
+			continue;
+		};
 
 		graph.add_node(Node::new(package.clone()));
 
 		for (_, input) in &plot.inputs {
-			let Some(other_package) = package_name(input) else { continue; };
+			let Some(other_package) = package_name(input) else {
+				continue;
+			};
 			if plots.contains_key(other_package) {
 				if visited.contains(other_package) {
 					let decoupled = format!("{}:{}", package, other_package);
