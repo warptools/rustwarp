@@ -5,3 +5,7 @@ edition = "2021"
 
 [dependencies]
 starlark = "*"
+lsp-server = "*"
+lsp-types = "*"
+serde = { workspace = true }
+serde_json = { workspace = true }
