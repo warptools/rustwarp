@@ -1,14 +1,15 @@
 [workspace]
 resolver = "2"
 members = [
-  "warpforge-api",
-  "warpforge-cli",
-  "warpforge-executors",
-  "warpforge-terminal",
-  "warpforge-visualize",
-  "catverters",
-  "catverters-derive",
-  "testfiles-derive",
+    "warpforge-api",
+    "warpforge-cli",
+    "warpforge-executors",
+    "warpforge-terminal",
+    "warpforge-visualize",
+    "catverters",
+    "catverters-derive",
+    "testfiles-derive",
+    "warpscript",
 ]
 
 [workspace.package]
@@ -19,15 +20,15 @@ thiserror = "*"
 itoa = "*"
 ryu = "*"
 tokio = { version = "*", features = [
-  "io-util",
-  "macros",
-  "net",
-  "process",
-  "rt",
-  "rt-multi-thread",
-  "signal",
-  "sync",
-  "time",
+    "io-util",
+    "macros",
+    "net",
+    "process",
+    "rt",
+    "rt-multi-thread",
+    "signal",
+    "sync",
+    "time",
 ] }
 tokio-util = "*"
 indexmap = { version = "*", features = ["serde"] }
