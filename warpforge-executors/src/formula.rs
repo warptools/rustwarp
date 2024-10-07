@@ -1,11 +1,9 @@
 use indexmap::IndexMap;
-use oci_unpack::tee::WriteExt;
 use oci_unpack::{pull_and_unpack, PullConfig};
 use rand::distributions::{Alphanumeric, DistString};
-use sha2::{Digest, Sha384};
-use std::fs::{self, File};
-use std::io::{BufWriter, Write};
-use std::path::{Path, PathBuf};
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
 use tokio::sync::mpsc;
 use warpforge_api::content::Packtype;
 use warpforge_api::formula::{
@@ -18,6 +16,7 @@ use warpforge_terminal::{logln, set_lower, set_lower_max, set_lower_position};
 use crate::context::Context;
 use crate::events::EventBody;
 use crate::execute::Executor;
+use crate::pack::{tar_dir_hash_only, tar_dir_to_file};
 use crate::{to_string_or_panic, ContainerParams, Error, Event, MountSpec, Output, Result};
 
 pub struct Formula<'a> {
@@ -369,70 +368,21 @@ impl<'a> Formula<'a> {
 				packtype,
 			} = output;
 
+			let target = target_dir.join(name);
 			let output = match packtype {
-				OutputPacktype::None => self.pack_output_dir(name, host_path, &target_dir)?,
-				OutputPacktype::Tar => self.pack_output_tar(name, host_path, &target_dir)?,
+				OutputPacktype::None => {
+					// TODO: Handle ErrorKind::CrossesDevices: we should handle move between mounts.
+					fs::rename(host_path, &target).map_err(|err| Error::SystemRuntimeError {
+						msg: "failed to move output dir to target".into(),
+						cause: Box::new(err),
+					})?;
+					tar_dir_hash_only(name, target)?
+				}
+				OutputPacktype::Tar => tar_dir_to_file(name, host_path, &target)?,
 			};
 			results.push(output);
 		}
 
 		Ok(results)
-	}
-
-	fn pack_output_dir(
-		&self,
-		name: &str,
-		source_dir: impl AsRef<Path>,
-		target_dir: impl AsRef<Path>,
-	) -> Result<Output> {
-		let mut digester = Sha384::new();
-		Self::tar_dir(&source_dir, &mut digester)?;
-		let digest = crate::Digest::Sha384(format!("{:x}", digester.finalize()));
-
-		let target_dir = target_dir.as_ref().join(name);
-		// TODO: Handle ErrorKind::CrossesDevices: we should handle move between mounts.
-		fs::rename(source_dir, target_dir).map_err(|err| Error::SystemRuntimeError {
-			msg: "failed to move output dir to target".into(),
-			cause: Box::new(err),
-		})?;
-
-		let name = name.to_owned();
-		Ok(Output { name, digest })
-	}
-
-	fn pack_output_tar(
-		&self,
-		name: &str,
-		source_dir: impl AsRef<Path>,
-		target_dir: impl AsRef<Path>,
-	) -> Result<Output> {
-		let writer = File::create(target_dir.as_ref().join(name))
-			.map(BufWriter::new)
-			.map_err(|err| Error::SystemRuntimeError {
-				msg: "failed to create output file".into(),
-				cause: Box::new(err),
-			})?;
-
-		let mut digester = Sha384::new();
-		let writer = writer.tee(&mut digester);
-
-		Self::tar_dir(source_dir, writer)?;
-
-		Ok(Output {
-			name: name.to_owned(),
-			digest: crate::Digest::Sha384(format!("{:x}", digester.finalize())),
-		})
-	}
-
-	fn tar_dir(source_dir: impl AsRef<Path>, writer: impl Write) -> Result<()> {
-		let mut archive = tar::Builder::new(writer);
-		archive.mode(tar::HeaderMode::Deterministic);
-		archive
-			.append_dir_all("", source_dir)
-			.and_then(|_| archive.finish())
-			.map_err(|err| Error::SystemRuntimeError {
-				msg: "failed to pack output".into(),
-				cause: Box::new(err),
-			})
 	}
 }

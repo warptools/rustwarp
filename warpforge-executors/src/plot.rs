@@ -5,7 +5,7 @@ use warpforge_api::formula::{
 	Formula, FormulaAndContext, FormulaCapsule, FormulaContext, FormulaContextCapsule,
 	FormulaInput, GatherDirective, Mount,
 };
-use warpforge_api::plot::{PlotCapsule, PlotInput, Step, StepName};
+use warpforge_api::plot::{Plot, PlotCapsule, PlotInput, Step, StepName};
 use warpforge_terminal::logln;
 
 use crate::context::Context;
@@ -13,7 +13,9 @@ use crate::formula::run_formula;
 use crate::{to_string_or_panic, Error, Output, Result};
 
 pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
-	let graph = PlotGraph::new(&plot);
+	let PlotCapsule::V1(plot) = &plot;
+
+	let graph = PlotGraph::new(plot);
 	graph.validate()?;
 
 	let temp_dir = TempDir::new().map_err(|err| Error::SystemSetupError {
@@ -21,27 +23,50 @@ pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
 		cause: Box::new(err),
 	})?;
 
-	// TODO: Execute in graph order.
+	PlotExecutor {
+		context,
+		plot,
+		graph,
+		temp_dir,
+	}
+	.run()
+	.await
+}
 
-	let PlotCapsule::V1(plot) = &plot;
-	for (StepName(step_name), step) in &plot.steps {
-		let Step::Protoformula(step) = step else {
+#[allow(unused)]
+struct PlotExecutor<'a> {
+	context: &'a Context,
+	plot: &'a Plot,
+	graph: PlotGraph<'a>,
+	temp_dir: TempDir,
+}
+
+impl<'a> PlotExecutor<'a> {
+	async fn run(&self) -> Result<()> {
+		// TODO: Execute in graph order.
+
+		for step in &self.plot.steps {
+			self.run_step(step).await?;
+		}
+
+		Ok(())
+	}
+
+	async fn run_step(&self, step: (&StepName, &Step)) -> Result<()> {
+		let (StepName(step_name), Step::Protoformula(step)) = step else {
 			todo!(); // TODO: Implement sub-plots.
 		};
-
-		let step_dir = temp_dir.path().join(step_name);
+		let step_dir = self.temp_dir.path().join(step_name);
 		let output_path = Some(step_dir.join("outputs"));
 		let context = Context {
 			output_path,
-			..context.clone()
+			..self.context.clone()
 		};
-
-		let image = plot.image.as_ref().or(step.image.as_ref());
+		let image = self.plot.image.as_ref().or(step.image.as_ref());
 		let Some(image) = image else {
 			let msg = format!("invalid plot (step '{step_name}'): image required");
 			return Err(Error::SystemSetupCauseless { msg });
 		};
-
 		let inputs = (step.inputs.iter())
 			.map(|(port, input)| {
 				let input = match input {
@@ -52,7 +77,7 @@ pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
 						if pipe.step_name.is_empty() {
 							todo!();
 						}
-						let path = (temp_dir.path())
+						let path = (self.temp_dir.path())
 							.join(&pipe.step_name)
 							.join("outputs")
 							.join(&pipe.label.0);
@@ -64,7 +89,6 @@ pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
 				(port.to_owned(), input)
 			})
 			.collect::<IndexMap<_, _>>();
-
 		for (_, GatherDirective { packtype, .. }) in &step.outputs {
 			if (packtype.as_ref())
 				.map(|Packtype(p)| p != "none")
@@ -75,21 +99,18 @@ pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
 				return Err(Error::SystemSetupCauseless { msg });
 			}
 		}
-
 		let formula = Formula {
 			image: image.clone(),
 			inputs,
 			action: step.action.clone(),
 			outputs: step.outputs.clone(),
 		};
-
 		let formula = FormulaAndContext {
 			formula: FormulaCapsule::V1(formula),
 			context: FormulaContextCapsule::V1(FormulaContext {
 				warehouses: IndexMap::with_capacity(0),
 			}),
 		};
-
 		let outputs = run_formula(formula, &context).await.map_err(|err| {
 			let msg = format!("failed step '{step_name}'");
 			let cause = Box::new(err);
@@ -104,9 +125,9 @@ pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
 			} = output;
 			logln!("  sha384:{digest} {name}");
 		}
-	}
 
-	Ok(())
+		Ok(())
+	}
 }
 
 #[derive(Debug)]
@@ -117,12 +138,11 @@ pub(crate) struct PlotGraph<'a> {
 }
 
 impl<'a> PlotGraph<'a> {
-	pub(crate) fn new(plot: &'a PlotCapsule) -> Self {
+	pub(crate) fn new(plot: &'a Plot) -> Self {
 		let mut parents = IndexMap::new();
 		let mut children = IndexMap::new();
 		let mut nodes = IndexMap::new();
 
-		let PlotCapsule::V1(plot) = plot;
 		for (StepName(name), step) in &plot.steps {
 			nodes.insert(name.as_str(), step);
 			match step {

@@ -71,7 +71,8 @@ fn cyclic_graph() {
 	}))
 	.unwrap();
 
-	let graph = PlotGraph::new(&plot);
+	let PlotCapsule::V1(plot) = &plot;
+	let graph = PlotGraph::new(plot);
 	assert!(graph.validate().is_err());
 	assert!(graph.validate_no_cycles().is_err());
 }
@@ -145,7 +146,8 @@ fn invalid_edges() {
 	}))
 	.unwrap();
 
-	let graph = PlotGraph::new(&plot);
+	let PlotCapsule::V1(plot) = &plot;
+	let graph = PlotGraph::new(plot);
 	assert!(graph.validate().is_err());
 	assert!(graph.validate_dependencies_exist().is_err());
 }
