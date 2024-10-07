@@ -23,7 +23,7 @@ pub fn main_loop(connection: &LspConnection) -> Result<(), lsp_server::ProtocolE
 						};
 						serde_json::to_value(resp).expect("response to json")
 					}
-					_ => todo!("unexpected request method"),
+					_ => todo!("unexpected request method {:?}", req.method),
 				};
 				let response = lsp_server::Response {
 					id,
@@ -35,7 +35,9 @@ pub fn main_loop(connection: &LspConnection) -> Result<(), lsp_server::ProtocolE
 					.send(lsp_server::Message::Response(response))
 					.expect("channel send LSP response")
 			}
-			lsp_server::Message::Notification(x) => todo!("nyi"),
+			lsp_server::Message::Notification(x) => {
+				eprintln!("nyi notification method {:?}", x.method)
+			}
 			lsp_server::Message::Response(_) => {
 				todo!("didn't expect any lsp responses")
 			}
