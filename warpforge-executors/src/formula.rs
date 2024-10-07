@@ -16,23 +16,12 @@ use warpforge_terminal::{logln, set_lower, set_lower_max, set_lower_position};
 use crate::context::Context;
 use crate::events::EventBody;
 use crate::execute::Executor;
-use crate::pack::{tar_dir_hash_only, tar_dir_to_file};
+use crate::pack::{pack_outputs, IntermediateOutput, OutputPacktype};
 use crate::{to_string_or_panic, ContainerParams, Error, Event, MountSpec, Output, Result};
 
 pub struct Formula<'a> {
 	pub(crate) executor: Executor,
 	pub(crate) context: &'a Context,
-}
-
-struct IntermediateOutput {
-	name: String,
-	host_path: PathBuf,
-	packtype: OutputPacktype,
-}
-
-enum OutputPacktype {
-	None,
-	Tar,
 }
 
 pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<Vec<Output>> {
@@ -223,7 +212,7 @@ impl<'a> Formula<'a> {
 
 		set_lower_position(5).await;
 
-		self.pack_outputs(&outputs)
+		pack_outputs(&self.context.output_path, &outputs)
 	}
 
 	/// Create all input mounts and collect environment variable inputs.
@@ -345,44 +334,5 @@ impl<'a> Formula<'a> {
 		}
 
 		Ok(outputs)
-	}
-
-	fn pack_outputs(&self, outputs: &[IntermediateOutput]) -> Result<Vec<Output>> {
-		if outputs.is_empty() {
-			return Ok(Vec::with_capacity(0)); // exit early without allocations.
-		}
-		// TODO: In the future we probably want to add the blobs to some kind of warehouse.
-
-		let mut results = Vec::new();
-
-		let target_dir = self.context.output_path.clone().unwrap_or_default();
-		fs::create_dir_all(&target_dir).map_err(|err| Error::SystemRuntimeError {
-			msg: "failed to create directory".into(),
-			cause: Box::new(err),
-		})?;
-
-		for output in outputs {
-			let IntermediateOutput {
-				name,
-				host_path,
-				packtype,
-			} = output;
-
-			let target = target_dir.join(name);
-			let output = match packtype {
-				OutputPacktype::None => {
-					// TODO: Handle ErrorKind::CrossesDevices: we should handle move between mounts.
-					fs::rename(host_path, &target).map_err(|err| Error::SystemRuntimeError {
-						msg: "failed to move output dir to target".into(),
-						cause: Box::new(err),
-					})?;
-					tar_dir_hash_only(name, target)?
-				}
-				OutputPacktype::Tar => tar_dir_to_file(name, host_path, &target)?,
-			};
-			results.push(output);
-		}
-
-		Ok(results)
 	}
 }

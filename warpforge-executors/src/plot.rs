@@ -5,14 +5,17 @@ use warpforge_api::formula::{
 	Formula, FormulaAndContext, FormulaCapsule, FormulaContext, FormulaContextCapsule,
 	FormulaInput, GatherDirective, Mount,
 };
-use warpforge_api::plot::{Plot, PlotCapsule, PlotInput, Step, StepName};
+use warpforge_api::plot::{LocalLabel, Plot, PlotCapsule, PlotInput, PlotOutput, Step, StepName};
 use warpforge_terminal::logln;
 
 use crate::context::Context;
 use crate::formula::run_formula;
+use crate::pack::{pack_outputs, IntermediateOutput, OutputPacktype};
 use crate::{to_string_or_panic, Error, Output, Result};
 
-pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<()> {
+const OUTPUTS_DIR: &str = "outputs";
+
+pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<Vec<Output>> {
 	let PlotCapsule::V1(plot) = &plot;
 
 	let graph = PlotGraph::new(plot);
@@ -42,14 +45,27 @@ struct PlotExecutor<'a> {
 }
 
 impl<'a> PlotExecutor<'a> {
-	async fn run(&self) -> Result<()> {
+	async fn run(&self) -> Result<Vec<Output>> {
 		// TODO: Execute in graph order.
-
 		for step in &self.plot.steps {
 			self.run_step(step).await?;
 		}
 
-		Ok(())
+		let outputs = (self.plot.outputs.iter())
+			.map(|(LocalLabel(name), PlotOutput::Pipe(pipe))| {
+				let host_path = (self.temp_dir.path())
+					.join(&pipe.step_name)
+					.join(OUTPUTS_DIR)
+					.join(&pipe.label.0);
+				IntermediateOutput {
+					name: name.to_owned(),
+					host_path,
+					packtype: OutputPacktype::Tar,
+				}
+			})
+			.collect::<Vec<_>>();
+
+		pack_outputs(&self.context.output_path, &outputs)
 	}
 
 	async fn run_step(&self, step: (&StepName, &Step)) -> Result<()> {
@@ -57,7 +73,7 @@ impl<'a> PlotExecutor<'a> {
 			todo!(); // TODO: Implement sub-plots.
 		};
 		let step_dir = self.temp_dir.path().join(step_name);
-		let output_path = Some(step_dir.join("outputs"));
+		let output_path = Some(step_dir.join(OUTPUTS_DIR));
 		let context = Context {
 			output_path,
 			..self.context.clone()
@@ -79,7 +95,7 @@ impl<'a> PlotExecutor<'a> {
 						}
 						let path = (self.temp_dir.path())
 							.join(&pipe.step_name)
-							.join("outputs")
+							.join(OUTPUTS_DIR)
 							.join(&pipe.label.0);
 						FormulaInput::Mount(Mount::ReadOnly(to_string_or_panic(path)))
 					}

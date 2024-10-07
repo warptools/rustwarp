@@ -71,8 +71,15 @@ async fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> 
 		mount_path: Some(parent),
 		..Default::default()
 	};
+	let outputs = run_plot(plot, &context).await?;
 
-	run_plot(plot, &context).await?;
+	for output in outputs {
+		let warpforge_executors::Output {
+			name,
+			digest: Digest::Sha384(digest),
+		} = output;
+		logln!("sha384:{digest} {name}");
+	}
 
 	Ok(())
 }

@@ -1,13 +1,65 @@
 use std::{
-	fs::File,
+	fs::{self, File},
 	io::{BufWriter, Write},
-	path::Path,
+	path::{Path, PathBuf},
 };
 
 use oci_unpack::tee::WriteExt;
 use sha2::{Digest, Sha384};
 
 use crate::{Error, Output, Result};
+
+pub(crate) struct IntermediateOutput {
+	pub(crate) name: String,
+	pub(crate) host_path: PathBuf,
+	pub(crate) packtype: OutputPacktype,
+}
+
+pub(crate) enum OutputPacktype {
+	None,
+	Tar,
+}
+
+pub(crate) fn pack_outputs(
+	output_dir: &Option<PathBuf>,
+	outputs: &[IntermediateOutput],
+) -> Result<Vec<Output>> {
+	if outputs.is_empty() {
+		return Ok(Vec::with_capacity(0)); // exit early without allocations.
+	}
+
+	let mut results = Vec::new();
+
+	let target_dir = output_dir.clone().unwrap_or_default();
+	fs::create_dir_all(&target_dir).map_err(|err| Error::SystemRuntimeError {
+		msg: "failed to create directory".into(),
+		cause: Box::new(err),
+	})?;
+
+	for output in outputs {
+		let IntermediateOutput {
+			name,
+			host_path,
+			packtype,
+		} = output;
+
+		let target = target_dir.join(name);
+		let output = match packtype {
+			OutputPacktype::None => {
+				// TODO: Handle ErrorKind::CrossesDevices: we should handle move between mounts.
+				fs::rename(host_path, &target).map_err(|err| Error::SystemRuntimeError {
+					msg: "failed to move output dir to target".into(),
+					cause: Box::new(err),
+				})?;
+				tar_dir_hash_only(name, target)?
+			}
+			OutputPacktype::Tar => tar_dir_to_file(name, host_path, &target)?,
+		};
+		results.push(output);
+	}
+
+	Ok(results)
+}
 
 pub(crate) fn tar_dir_hash_only(name: &str, source_dir: impl AsRef<Path>) -> Result<Output> {
 	let mut digester = Sha384::new();
