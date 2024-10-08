@@ -6,7 +6,7 @@ use warpforge_api::formula::{
 	FormulaInput, GatherDirective, Mount,
 };
 use warpforge_api::plot::{LocalLabel, Plot, PlotCapsule, PlotInput, PlotOutput, Step, StepName};
-use warpforge_terminal::logln;
+use warpforge_terminal::{logln, set_upper, set_upper_max, set_upper_position};
 
 use crate::context::Context;
 use crate::formula::run_formula;
@@ -46,6 +46,10 @@ struct PlotExecutor<'a> {
 
 impl<'a> PlotExecutor<'a> {
 	async fn run(&self) -> Result<Vec<Output>> {
+		set_upper("plot").await;
+		set_upper_max(self.plot.steps.len() as u64).await;
+		set_upper_position(0).await;
+
 		let mut parents = self.graph.parents.clone();
 		let mut next_steps = (self.graph.nodes.keys().cloned())
 			.filter(|name| match parents.get(name) {
@@ -55,8 +59,12 @@ impl<'a> PlotExecutor<'a> {
 			.collect::<Vec<_>>();
 
 		// TODO: Run multiple steps in parallel, when possible.
+		let mut completed_count = 0;
 		while let Some(step_name) = next_steps.pop() {
 			self.run_step(step_name).await?;
+
+			completed_count += 1;
+			set_upper_position(completed_count).await;
 
 			let Some(children) = self.graph.children.get(step_name) else {
 				continue;
