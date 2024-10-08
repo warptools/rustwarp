@@ -5,7 +5,7 @@ use crate::plot::PlotGraph;
 
 #[test]
 fn cyclic_graph() {
-	let plot: PlotCapsule = serde_json::from_value(json!({
+	let PlotCapsule::V1(plot) = serde_json::from_value(json!({
 		"plot.v1": {
 			"image": {
 				"reference": "docker.io/busybox:latest",
@@ -71,15 +71,14 @@ fn cyclic_graph() {
 	}))
 	.unwrap();
 
-	let PlotCapsule::V1(plot) = &plot;
-	let graph = PlotGraph::new(plot);
+	let graph = PlotGraph::new(&plot);
 	assert!(graph.validate().is_err());
 	assert!(graph.validate_no_cycles().is_err());
 }
 
 #[test]
 fn invalid_edges() {
-	let plot: PlotCapsule = serde_json::from_value(json!({
+	let PlotCapsule::V1(plot) = serde_json::from_value(json!({
 		"plot.v1": {
 			"image": {
 				"reference": "docker.io/busybox:latest",
@@ -146,8 +145,7 @@ fn invalid_edges() {
 	}))
 	.unwrap();
 
-	let PlotCapsule::V1(plot) = &plot;
-	let graph = PlotGraph::new(plot);
+	let graph = PlotGraph::new(&plot);
 	assert!(graph.validate().is_err());
 	assert!(graph.validate_dependencies_exist().is_err());
 }
