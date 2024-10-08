@@ -46,9 +46,28 @@ struct PlotExecutor<'a> {
 
 impl<'a> PlotExecutor<'a> {
 	async fn run(&self) -> Result<Vec<Output>> {
-		// TODO: Execute in graph order.
-		for step in &self.plot.steps {
-			self.run_step(step).await?;
+		let mut parents = self.graph.parents.clone();
+		let mut next_steps = (self.graph.nodes.keys().cloned())
+			.filter(|name| match parents.get(name) {
+				Some(node_parents) => node_parents.is_empty(),
+				None => true,
+			})
+			.collect::<Vec<_>>();
+
+		// TODO: Run multiple steps in parallel, when possible.
+		while let Some(step_name) = next_steps.pop() {
+			self.run_step(step_name).await?;
+
+			let Some(children) = self.graph.children.get(step_name) else {
+				continue;
+			};
+			for &child in children {
+				let child_parents = &mut parents[child];
+				let removed = child_parents.remove(step_name);
+				if removed && child_parents.is_empty() {
+					next_steps.push(child);
+				}
+			}
 		}
 
 		let outputs = (self.plot.outputs.iter())
@@ -68,8 +87,8 @@ impl<'a> PlotExecutor<'a> {
 		pack_outputs(&self.context.output_path, &outputs)
 	}
 
-	async fn run_step(&self, step: (&StepName, &Step)) -> Result<()> {
-		let (StepName(step_name), Step::Protoformula(step)) = step else {
+	async fn run_step(&self, step_name: &str) -> Result<()> {
+		let Step::Protoformula(step) = self.graph.nodes[step_name] else {
 			todo!(); // TODO: Implement sub-plots.
 		};
 		let step_dir = self.temp_dir.path().join(step_name);
