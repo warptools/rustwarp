@@ -158,9 +158,9 @@ impl<'a> Formula<'a> {
 	) -> Result<Vec<Output>> {
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
-		set_lower("formula").await;
-		set_lower_max(5).await;
-		set_lower_position(0).await;
+		set_lower("formula");
+		set_lower_max(5);
+		set_lower_position(0);
 
 		let (mut mounts, environment) = self.setup_inputs(formula.inputs)?;
 
@@ -180,7 +180,7 @@ impl<'a> Formula<'a> {
 		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 		let ident = format!("warpforge-{random_suffix}");
 
-		set_lower_position(1).await;
+		set_lower_position(1);
 
 		let bundle_path = self.executor.ersatz_dir.join(&ident);
 		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
@@ -198,7 +198,7 @@ impl<'a> Formula<'a> {
 				cause: Box::new(err),
 			})?;
 
-		set_lower_position(3).await;
+		set_lower_position(3);
 
 		let params = ContainerParams {
 			ident,
@@ -210,7 +210,7 @@ impl<'a> Formula<'a> {
 		};
 		self.executor.run(&params, outbox).await?;
 
-		set_lower_position(5).await;
+		set_lower_position(5);
 
 		pack_outputs(&self.context.output_path, &outputs)
 	}

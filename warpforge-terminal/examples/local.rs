@@ -1,8 +1,7 @@
 use warpforge_terminal::Logger;
 
-#[tokio::main]
-async fn main() {
+fn main() {
 	let logger = Logger::new_local();
-	logger.log("Hello, World!\n").await.unwrap();
-	let _ = logger.close().await;
+	logger.log("Hello, World!\n").unwrap();
+	let _ = logger.close();
 }

@@ -1,7 +1,7 @@
-use std::{env::args, time::Duration};
+use std::{env::args, thread, time::Duration};
 
+use crossbeam_channel::Receiver;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
-use tokio::{sync::mpsc::Receiver, time::interval};
 
 use crate::{Message, Serializable};
 
@@ -16,7 +16,7 @@ pub(crate) struct TerminalRenderer {
 
 impl TerminalRenderer {
 	pub(crate) fn start(channel: Receiver<Message>) {
-		tokio::spawn(async move {
+		thread::spawn(move || {
 			Self {
 				multi_progress: None,
 				prompt: None,
@@ -25,7 +25,6 @@ impl TerminalRenderer {
 				channel,
 			}
 			.run()
-			.await
 		});
 	}
 
@@ -59,27 +58,29 @@ impl TerminalRenderer {
 			.progress_chars("##-")
 	}
 
-	async fn run(mut self) {
-		let mut interval = interval(Duration::from_secs(1));
+	fn run(mut self) {
 		loop {
-			let message = tokio::select! {
-				message = self.channel.recv() => message,
-				_ = interval.tick() => {
-					// Make progress bars redraw at least every second,
-					// so elapsed time is rendered correctly.
-					if let Some(upper_bar) = &self.upper_bar {
-						upper_bar.tick();
+			let timeout = Duration::from_secs(1);
+			let message = match self.channel.recv_timeout(timeout) {
+				Ok(message) => message,
+				Err(err) => {
+					if err.is_timeout() {
+						// Make progress bars redraw at least every second,
+						// so elapsed time is rendered correctly.
+						if let Some(upper_bar) = &self.upper_bar {
+							upper_bar.tick();
+						}
+						if let Some(lower_bar) = &self.lower_bar {
+							lower_bar.tick();
+						}
+						continue;
+					} else {
+						debug_assert!(err.is_disconnected());
+						break;
 					}
-					if let Some(lower_bar) = &self.lower_bar {
-						lower_bar.tick();
-					}
-					continue;
 				}
 			};
 
-			let Some(message) = message else {
-				break; // Stop rendering, after all `Sender` instances have been destroyed.
-			};
 			match message {
 				Message::CloseLocalRenderer(notify) => {
 					let _ = notify.send(()); // Ignore if no notification could be sent.

@@ -5,8 +5,7 @@
 //! ```
 //! use warpforge_terminal::{logln, Logger};
 //!
-//! # #[tokio::main]
-//! # async fn main() {
+//! # fn main() {
 //! Logger::set_global(Logger::new_local()).unwrap();
 //!
 //! logln!("Hello, World!");
@@ -28,16 +27,14 @@ mod render;
 mod server;
 
 use std::io;
+use std::sync::mpsc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
+use crossbeam_channel::Sender;
 use errors::GlobalLoggerAlreadyDefined;
 use serde::{Deserialize, Serialize};
 use server::Server;
-use tokio::select;
-use tokio::sync::mpsc::{self, Sender};
-use tokio::sync::oneshot;
-use tokio::time::sleep;
 
 pub use crate::client::render_remote_logs;
 pub use crate::errors::Error;
@@ -59,7 +56,7 @@ pub enum Message {
 	/// Closes the local renderer, if it exists which sends a notification over the given
 	/// oneshot channel once all messages are rendered to the terminal.
 	/// If no local renderer is attached, the oneshot channel is droped.
-	CloseLocalRenderer(oneshot::Sender<()>),
+	CloseLocalRenderer(mpsc::Sender<()>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -85,14 +82,14 @@ impl PartialEq for Message {
 
 impl Logger {
 	pub fn new_local() -> Self {
-		let (sender, receiver) = mpsc::channel(32);
+		let (sender, receiver) = crossbeam_channel::bounded(32);
 		TerminalRenderer::start(receiver);
 		Self { channel: sender }
 	}
 
-	pub async fn new_server(port: u16) -> std::result::Result<Self, io::Error> {
-		let (sender, receiver) = mpsc::channel(32);
-		Server::new(receiver).start(port).await?;
+	pub fn new_server(port: u16) -> std::result::Result<Self, io::Error> {
+		let (sender, receiver) = crossbeam_channel::bounded(32);
+		Server::new(receiver).start(port)?;
 		Ok(Self { channel: sender })
 	}
 
@@ -104,95 +101,86 @@ impl Logger {
 		LOGGER.get()
 	}
 
-	pub async fn log(&self, message: impl Into<String>) -> Result<()> {
+	pub fn log(&self, message: impl Into<String>) -> Result<()> {
 		self.send_serializable(Serializable::Log(message.into()))
-			.await
 	}
 
-	pub async fn set_upper(&self, name: impl Into<String>) -> Result<()> {
+	pub fn set_upper(&self, name: impl Into<String>) -> Result<()> {
 		self.send_serializable(Serializable::SetUpper(name.into()))
-			.await
 	}
 
-	pub async fn set_lower(&self, name: impl Into<String>) -> Result<()> {
+	pub fn set_lower(&self, name: impl Into<String>) -> Result<()> {
 		self.send_serializable(Serializable::SetLower(name.into()))
-			.await
 	}
 
-	pub async fn set_upper_position(&self, position: u64) -> Result<()> {
+	pub fn set_upper_position(&self, position: u64) -> Result<()> {
 		self.send_serializable(Serializable::SetUpperPosition(position))
-			.await
 	}
 
-	pub async fn set_lower_position(&self, position: u64) -> Result<()> {
+	pub fn set_lower_position(&self, position: u64) -> Result<()> {
 		self.send_serializable(Serializable::SetLowerPosition(position))
-			.await
 	}
 
-	pub async fn set_upper_max(&self, max: u64) -> Result<()> {
-		self.send_serializable(Serializable::SetUpperMax(max)).await
+	pub fn set_upper_max(&self, max: u64) -> Result<()> {
+		self.send_serializable(Serializable::SetUpperMax(max))
 	}
 
-	pub async fn set_lower_max(&self, max: u64) -> Result<()> {
-		self.send_serializable(Serializable::SetLowerMax(max)).await
+	pub fn set_lower_max(&self, max: u64) -> Result<()> {
+		self.send_serializable(Serializable::SetLowerMax(max))
 	}
 
-	pub async fn close(&self) -> Result<()> {
-		let (sender, receiver) = oneshot::channel();
-		self.send(Message::CloseLocalRenderer(sender)).await?;
+	pub fn close(&self) -> Result<()> {
+		let (sender, receiver) = mpsc::channel();
+		self.send(Message::CloseLocalRenderer(sender))?;
 		// Wait for notification from receiver but
 		// wait no longer than the defined max time.
-		select! {
-			_ = receiver => {}
-			_ = sleep(Duration::from_millis(100)) => {}
-		}
+		let _ = receiver.recv_timeout(Duration::from_millis(100));
 		Ok(())
 	}
 
-	async fn send_serializable(&self, message: Serializable) -> Result<()> {
-		self.send(Message::Serializable(message)).await
+	fn send_serializable(&self, message: Serializable) -> Result<()> {
+		self.send(Message::Serializable(message))
 	}
 
-	async fn send(&self, message: Message) -> Result<()> {
+	fn send(&self, message: Message) -> Result<()> {
 		self.channel
 			.send(message)
-			.await
 			.map_err(|e| Error::ChannelInternal { input: e.0 })
 	}
 }
 
-pub async fn set_upper(name: impl Into<String>) {
+pub fn set_upper(name: impl Into<String>) {
 	if let Some(logger) = Logger::get_global() {
-		logger.set_upper(name).await.unwrap();
+		logger.set_upper(name).unwrap();
 	}
 }
 
-pub async fn set_lower(name: impl Into<String>) {
+pub fn set_lower(name: impl Into<String>) {
 	if let Some(logger) = Logger::get_global() {
-		logger.set_lower(name).await.unwrap();
+		logger.set_lower(name).unwrap();
 	}
 }
 
-pub async fn set_upper_position(position: u64) {
+pub fn set_upper_position(position: u64) {
 	if let Some(logger) = Logger::get_global() {
-		logger.set_upper_position(position).await.unwrap();
+		logger.set_upper_position(position).unwrap();
 	}
 }
 
-pub async fn set_lower_position(position: u64) {
+pub fn set_lower_position(position: u64) {
 	if let Some(logger) = Logger::get_global() {
-		logger.set_lower_position(position).await.unwrap();
+		logger.set_lower_position(position).unwrap();
 	}
 }
 
-pub async fn set_upper_max(max: u64) {
+pub fn set_upper_max(max: u64) {
 	if let Some(logger) = Logger::get_global() {
-		logger.set_upper_max(max).await.unwrap();
+		logger.set_upper_max(max).unwrap();
 	}
 }
 
-pub async fn set_lower_max(max: u64) {
+pub fn set_lower_max(max: u64) {
 	if let Some(logger) = Logger::get_global() {
-		logger.set_lower_max(max).await.unwrap();
+		logger.set_lower_max(max).unwrap();
 	}
 }

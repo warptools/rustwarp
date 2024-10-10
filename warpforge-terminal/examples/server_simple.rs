@@ -1,13 +1,11 @@
-use std::time::Duration;
+use std::{thread::sleep, time::Duration};
 
-use tokio::time::sleep;
 use warpforge_terminal::Logger;
 
-#[tokio::main]
-async fn main() {
-	let logger = Logger::new_server(8050).await.unwrap();
+fn main() {
+	let logger = Logger::new_server(8050).unwrap();
 	loop {
-		logger.log("Hello, World!\n").await.unwrap();
-		sleep(Duration::from_secs(1)).await;
+		logger.log("Hello, World!\n").unwrap();
+		sleep(Duration::from_secs(1));
 	}
 }

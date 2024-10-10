@@ -1,10 +1,11 @@
-use std::{io, net::Ipv6Addr};
-
-use tokio::{
-	io::AsyncWriteExt,
-	net::{TcpListener, TcpStream},
-	sync::mpsc::Receiver,
+use std::{
+	io::{self, ErrorKind, Write},
+	net::{Ipv6Addr, TcpListener, TcpStream},
+	thread,
+	time::Duration,
 };
+
+use crossbeam_channel::Receiver;
 
 use crate::{Message, Serializable};
 
@@ -17,56 +18,53 @@ impl Server {
 		Self { channel }
 	}
 
-	pub async fn start(self, port: u16) -> Result<(), io::Error> {
-		let listener = TcpListener::bind((Ipv6Addr::UNSPECIFIED, port)).await?;
+	pub fn start(self, port: u16) -> Result<(), io::Error> {
+		let listener = TcpListener::bind((Ipv6Addr::UNSPECIFIED, port))?;
+		listener.set_nonblocking(true)?;
 
-		tokio::spawn(async move {
-			let Self { mut channel } = self;
+		thread::spawn(move || {
+			let Self { channel } = self;
 			let mut message_cache = Vec::new();
 			let mut clients = Vec::new();
 
 			loop {
-				tokio::select! {
-					message = channel.recv() => {
-						let Some(message) = message else {
-							break; // Stop server after all Logger instances got destroyed.
-						};
-
-						let Message::Serializable(message) = message else {
-							continue; // Cannot send non-serializable messages.
-						};
-
-						let bytes = serialize_message(&message);
-						for i in (0..clients.len()).rev() {
-							let success = send(&mut clients[i], &bytes[..]).await;
-							if !success {
-								clients.swap_remove(i);
-							}
-						}
-
-						// FIXME: Currently grows indefinetely.
-						// We will have to decide on a trade-off on how many messages we want to cache
-						// or on how many clients we want to wait.
-						message_cache.push(message);
-					}
-					client = listener.accept() => {
-						let mut client = match client {
-							Ok((stream, _)) => stream,
-							Err(error) => {
-								eprintln!("[log server] error: failed to accept client: {error}");
-								continue;
-							}
-						};
-
+				match listener.accept() {
+					Ok((mut client, _)) => {
 						let mut success = true;
 						for message in &message_cache {
-							success = success && send(&mut client, &serialize_message(message)[..]).await;
+							success = success && send(&mut client, &serialize_message(message)[..]);
 						}
 						if success {
 							clients.push(client);
 						}
 					}
+					Err(error) if error.kind() == ErrorKind::WouldBlock => {}
+					Err(error) if error.kind() == ErrorKind::TimedOut => {}
+					Err(error) => {
+						eprintln!("[log server] error: failed to accept client: {error}");
+						continue;
+					}
 				}
+
+				let message = match channel.recv_timeout(Duration::from_millis(100)) {
+					Ok(Message::Serializable(message)) => message,
+					Ok(_) => continue, // Cannot send non-serializable messages.
+					Err(error) if error.is_timeout() => continue,
+					_ => break, // Stop server after all Logger instances got destroyed.
+				};
+
+				let bytes = serialize_message(&message);
+				for i in (0..clients.len()).rev() {
+					let success = send(&mut clients[i], &bytes[..]);
+					if !success {
+						clients.swap_remove(i);
+					}
+				}
+
+				// FIXME: Currently grows indefinetely.
+				// We will have to decide on a trade-off on how many messages we want to cache
+				// or on how many clients we want to wait.
+				message_cache.push(message);
 			}
 		});
 
@@ -81,10 +79,10 @@ fn serialize_message(message: &Serializable) -> Vec<u8> {
 	bytes
 }
 
-async fn send(client: &mut TcpStream, bytes: &[u8]) -> bool {
-	let result = client.write_all(bytes).await;
+fn send(client: &mut TcpStream, bytes: &[u8]) -> bool {
+	let result = client.write_all(bytes);
 	if result.is_err() {
-		let _ignore = client.shutdown().await;
+		let _ignore = client.shutdown(std::net::Shutdown::Both);
 		false
 	} else {
 		true

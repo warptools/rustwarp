@@ -1,13 +1,12 @@
-use std::net::Ipv4Addr;
+use std::{
+	io::{stdin, Read},
+	net::Ipv4Addr,
+};
 
-use tokio::signal;
 use warpforge_terminal::render_remote_logs;
 
-#[tokio::main]
-async fn main() {
-	let token = render_remote_logs((Ipv4Addr::LOCALHOST, 8050))
-		.await
-		.unwrap();
-	signal::ctrl_c().await.unwrap();
+fn main() {
+	let token = render_remote_logs((Ipv4Addr::LOCALHOST, 8050)).unwrap();
+	let _ = stdin().read(&mut [0u8]).unwrap();
 	token.cancel();
 }

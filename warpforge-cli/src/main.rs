@@ -22,7 +22,7 @@ async fn main() {
 	}
 
 	// Wait for all messages to be printed to stdout.
-	let _ = Logger::get_global().unwrap().close().await;
+	let _ = Logger::get_global().unwrap().close();
 
 	if let Err(e) = &result {
 		std::process::exit(e.code());

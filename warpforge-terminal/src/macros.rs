@@ -5,9 +5,9 @@ use crate::{Error, Logger, Message, Serializable};
 /// # Panics
 ///
 /// Panics on unexpected errors. Panic was unreachable when writing this comment.
-pub async fn log_global(message: impl Into<String>) {
+pub fn log_global(message: impl Into<String>) {
 	if let Some(logger) = Logger::get_global() {
-		match logger.log(message.into()).await {
+		match logger.log(message.into()) {
 			Ok(_) => {}
 			Err(Error::ChannelInternal {
 				input: Message::Serializable(Serializable::Log(message)),
@@ -33,8 +33,7 @@ pub async fn log_global(message: impl Into<String>) {
 /// ```
 /// use warpforge_terminal::{log, Logger};
 ///
-/// # #[tokio::main]
-/// # async fn main() {
+/// # fn main() {
 /// Logger::set_global(Logger::new_local()).unwrap();
 ///
 /// log!("Hello, ");
@@ -45,7 +44,7 @@ pub async fn log_global(message: impl Into<String>) {
 /// ```
 #[macro_export]
 macro_rules! log {
-	($($arg:tt)+) => { $crate::log_global(format!($($arg)+)).await };
+	($($arg:tt)+) => { $crate::log_global(format!($($arg)+)) };
 }
 
 /// Sends a message to the global logger, with a newline.
@@ -68,8 +67,7 @@ macro_rules! log {
 /// ```
 /// use warpforge_terminal::{logln, Logger};
 ///
-/// # #[tokio::main]
-/// # async fn main() {
+/// # fn main() {
 /// Logger::set_global(Logger::new_local()).unwrap();
 ///
 /// logln!(); // Logs just a newline
@@ -81,12 +79,12 @@ macro_rules! log {
 /// ```
 #[macro_export]
 macro_rules! logln {
-	() => { $crate::log_global("\n").await };
+	() => { $crate::log_global("\n") };
 	// Using two format_args! calls here, to avoid allocation of two String instances.
 	// https://github.com/rust-lang/rust/pull/97658#issuecomment-1530505696
 	// https://github.com/rust-lang/rust/pull/111060
 	($($arg:tt)+) => {{
 		let message = std::fmt::format(format_args!("{}\n", format_args!($($arg)+)));
-		$crate::log_global(message).await;
+		$crate::log_global(message);
 	}};
 }

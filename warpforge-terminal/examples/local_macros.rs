@@ -1,11 +1,10 @@
 use warpforge_terminal::{log, logln, Logger};
 
-#[tokio::main]
-async fn main() {
+fn main() {
 	Logger::set_global(Logger::new_local()).unwrap();
 	log!("{}, {}!\n", "hello", "world");
 	logln!("{}, {}", 42, 1337);
 
 	// Wait for all messages to be printed to stdout.
-	let _ = Logger::get_global().unwrap().close().await;
+	let _ = Logger::get_global().unwrap().close();
 }

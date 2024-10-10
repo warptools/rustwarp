@@ -1,11 +1,12 @@
-use std::io;
-
-use tokio::{
-	io::{AsyncRead, AsyncReadExt},
+use std::{
+	io::{self, ErrorKind, Read},
 	net::{TcpStream, ToSocketAddrs},
-	sync::mpsc::{self, Sender},
+	sync::{Arc, RwLock},
+	thread,
+	time::Duration,
 };
-use tokio_util::sync::CancellationToken;
+
+use crossbeam_channel::Sender;
 
 use crate::{render::TerminalRenderer, Message};
 
@@ -13,53 +14,74 @@ const BUFFER_SIZE: usize = 4096;
 const BUFFER_MIN_READ_SIZE: usize = 1024;
 const BUFFER_MAX_SIZE: usize = 65536;
 
-pub async fn render_remote_logs(
-	address: impl ToSocketAddrs,
-) -> Result<CancellationToken, io::Error> {
-	let connection = TcpStream::connect(address).await?;
-	let (sender, receiver) = mpsc::channel(32);
+pub fn render_remote_logs(address: impl ToSocketAddrs) -> Result<CancellationToken, io::Error> {
+	let connection = TcpStream::connect(address)?;
+	connection.set_read_timeout(Some(Duration::from_millis(100)))?;
+	let (sender, receiver) = crossbeam_channel::bounded(32);
 	TerminalRenderer::start(receiver);
 	Ok(start_client(sender, connection))
 }
 
+#[derive(Clone)]
+pub struct CancellationToken {
+	token: Arc<RwLock<bool>>,
+}
+
+impl CancellationToken {
+	fn new() -> Self {
+		Self {
+			token: Arc::new(RwLock::new(false)),
+		}
+	}
+
+	pub fn cancel(&self) {
+		*self.token.write().unwrap() = true;
+	}
+
+	pub fn cancelled(&self) -> bool {
+		*self.token.read().unwrap()
+	}
+}
+
 fn start_client<R>(channel: Sender<Message>, mut reader: R) -> CancellationToken
 where
-	R: AsyncRead + Unpin + Send + 'static,
+	R: Read + Send + 'static,
 {
 	let token = CancellationToken::new();
 	let cloned_token = token.clone();
 
-	tokio::spawn(async move {
-		let mut buffer = Vec::with_capacity(BUFFER_SIZE);
+	thread::spawn(move || {
+		let mut buffer = vec![0; BUFFER_SIZE];
 		let mut size = 0;
 		loop {
-			if buffer.capacity() - size < BUFFER_MIN_READ_SIZE
-				&& buffer.capacity() + BUFFER_SIZE <= BUFFER_MAX_SIZE
-			{
-				buffer.reserve(BUFFER_SIZE)
+			if token.cancelled() {
+				return;
 			}
 
-			if size >= buffer.capacity() {
+			if buffer.len() - size < BUFFER_MIN_READ_SIZE
+				&& buffer.len() + BUFFER_SIZE <= BUFFER_MAX_SIZE
+			{
+				buffer.resize(buffer.len() + BUFFER_SIZE, 0);
+			}
+
+			if size >= buffer.len() {
 				eprintln!("received message exceeds memory limit");
 				return;
 			}
 
-			let result = tokio::select! {
-				result = reader.read_buf(&mut buffer) => result,
-				_ = token.cancelled() => {
-					return; // graceful shutdown
-				}
-			};
-
-			let n = match result {
+			let n = match reader.read(&mut buffer[size..]) {
 				Ok(0) => {
 					eprintln!("server closed connection");
 					return;
 				}
 				Ok(n) => n,
 				Err(error) => {
-					eprintln!("failed to receive remote updates: {error}");
-					return;
+					if let ErrorKind::TimedOut | ErrorKind::WouldBlock = error.kind() {
+						continue;
+					} else {
+						eprintln!("failed to receive remote updates: {error}");
+						return;
+					}
 				}
 			};
 
@@ -75,7 +97,7 @@ where
 					};
 
 					start = i + 1;
-					let result = channel.send(Message::Serializable(message)).await;
+					let result = channel.send(Message::Serializable(message));
 					if result.is_err() {
 						eprintln!("terminal renderer closed channel unexpectedly");
 						eprintln!("use the cancellation token to shutdown the client gracefully");
@@ -97,38 +119,57 @@ where
 
 #[cfg(test)]
 mod tests {
-	use std::time::Duration;
+	use std::{mem, time::Duration};
 
-	use tokio_test::io::Builder;
+	use crossbeam_channel::Receiver;
 
 	use super::*;
 	use crate::{Message, Serializable};
 
-	trait BuilderExtension {
-		fn read_message(&mut self, message: &Serializable) -> &mut Self;
+	struct Builder {
+		data: Vec<u8>,
 	}
 
-	impl BuilderExtension for tokio_test::io::Builder {
+	impl Builder {
+		fn new() -> Self {
+			Self { data: Vec::new() }
+		}
+
+		fn read(&mut self, data: &[u8]) -> &mut Self {
+			self.data.extend_from_slice(data);
+			self
+		}
+
 		fn read_message(&mut self, message: &Serializable) -> &mut Self {
-			let mut bytes = Vec::new();
-			serde_json::to_writer(&mut bytes, message).unwrap();
-			bytes.push(0);
-			self.read(&bytes)
+			serde_json::to_writer(&mut self.data, message).unwrap();
+			self.data.push(0);
+			self
+		}
+
+		fn build(&mut self) -> &'static [u8] {
+			mem::take(&mut self.data).leak()
 		}
 	}
 
-	#[tokio::test]
-	async fn simple_message() {
-		let message = Serializable::Log("hi".to_string());
-		let reader = Builder::new().read_message(&message).build();
-		let (sender, mut receiver) = mpsc::channel(1);
-		start_client(sender, reader);
-
-		assert_eq!(Some(Message::Serializable(message)), receiver.recv().await);
+	fn sender_closed<T>(receiver: &Receiver<T>) -> bool {
+		match receiver.recv_timeout(Duration::from_millis(10)) {
+			Ok(_) => false,
+			Err(error) => dbg!(error).is_disconnected(),
+		}
 	}
 
-	#[tokio::test]
-	async fn multiple_messages() {
+	#[test]
+	fn simple_message() {
+		let message = Serializable::Log("hi".to_string());
+		let reader = Builder::new().read_message(&message).build();
+		let (sender, receiver) = crossbeam_channel::bounded(1);
+		start_client(sender, reader);
+
+		assert_eq!(Ok(Message::Serializable(message)), receiver.recv());
+	}
+
+	#[test]
+	fn multiple_messages() {
 		let messages = [
 			Serializable::Log("first".to_string()),
 			Serializable::SetUpperMax(5),
@@ -142,57 +183,58 @@ mod tests {
 		}
 		let reader = builder.build();
 
-		let (sender, mut receiver) = mpsc::channel(32);
+		let (sender, receiver) = crossbeam_channel::bounded(32);
 		start_client(sender, reader);
 
 		for message in messages {
-			assert_eq!(Some(Message::Serializable(message)), receiver.recv().await);
+			assert_eq!(Ok(Message::Serializable(message)), receiver.recv());
 		}
 	}
 
-	#[tokio::test]
-	async fn exceed_memory_limit() {
+	#[test]
+	fn exceed_memory_limit() {
 		let message = Serializable::Log("x".repeat(BUFFER_MAX_SIZE));
 		let reader = Builder::new().read_message(&message).build();
-		let (sender, mut receiver) = mpsc::channel(1);
+		let (sender, receiver) = crossbeam_channel::bounded(1);
 		start_client(sender, reader);
 
-		assert_eq!(None, receiver.recv().await);
+		assert!(sender_closed(&receiver));
 	}
 
-	#[tokio::test]
-	async fn server_closed_connection() {
+	#[test]
+	fn server_closed_connection() {
 		let message = Serializable::Log("hi".to_string());
 		let reader = Builder::new().read_message(&message).build();
-		let (sender, mut receiver) = mpsc::channel(1);
+		let (sender, receiver) = crossbeam_channel::bounded(1);
 		start_client(sender, reader);
 
-		assert_eq!(Some(Message::Serializable(message)), receiver.recv().await);
-		assert_eq!(None, receiver.recv().await);
+		assert_eq!(Ok(Message::Serializable(message)), receiver.recv());
+		assert!(sender_closed(&receiver));
 	}
 
-	#[tokio::test]
-	async fn invalid_message() {
+	#[test]
+	fn invalid_message() {
 		let reader = Builder::new().read(b"not json\0").build();
-		let (sender, mut receiver) = mpsc::channel(1);
+		let (sender, receiver) = crossbeam_channel::bounded(1);
 		start_client(sender, reader);
 
-		assert_eq!(None, receiver.recv().await);
+		assert!(sender_closed(&receiver));
 	}
 
-	#[tokio::test]
-	async fn graceful_shutdown() {
-		let message = Serializable::Log("hi".to_string());
-		let reader = Builder::new()
-			.wait(Duration::from_secs(5))
-			.read_message(&message)
-			.build();
-		let (sender, mut receiver) = mpsc::channel(1);
+	#[test]
+	fn graceful_shutdown() {
+		struct ReadWouldBlock;
+		impl Read for ReadWouldBlock {
+			fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+				Err(ErrorKind::WouldBlock.into())
+			}
+		}
+		let reader = ReadWouldBlock;
+
+		let (sender, receiver) = crossbeam_channel::bounded(1);
 		let token = start_client(sender, reader);
 		token.cancel();
 
-		// If the graceful shutdown does not work, the client will wait for the
-		// given duration and then receive `Some(message)` (instead of None).
-		assert_eq!(None, receiver.recv().await);
+		assert!(sender_closed(&receiver));
 	}
 }
