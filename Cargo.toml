@@ -17,18 +17,6 @@ edition = "2021"
 
 [workspace.dependencies]
 thiserror = "*"
-tokio = { version = "*", features = [
-    "io-util",
-    "macros",
-    "net",
-    "process",
-    "rt",
-    "rt-multi-thread",
-    "signal",
-    "sync",
-    "time",
-] }
-tokio-util = "*"
 indexmap = { version = "*", features = ["serde"] }
 serde = { version = "*", features = ["derive"] }
 serde_json = { version = "*", features = ["preserve_order"] }

@@ -6,8 +6,8 @@ use warpforge_api::formula::FormulaAndContext;
 
 use crate::tests::{default_context, run_formula_collect_output};
 
-#[tokio::test]
-async fn runc_overlayfs_mount() {
+#[test]
+fn runc_overlayfs_mount() {
 	let temp_dir = TempDir::new().unwrap();
 	let overlay_dir = temp_dir.path().join("overlay_lower");
 	let output_dir = temp_dir.path().join("rw");
@@ -57,9 +57,7 @@ async fn runc_overlayfs_mount() {
 	}))
 	.expect("failed to parse formula json");
 
-	let result = run_formula_collect_output(formula_and_context, &default_context())
-		.await
-		.unwrap();
+	let result = run_formula_collect_output(formula_and_context, &default_context()).unwrap();
 
 	assert_eq!(result.exit_code, Some(0));
 	for (name, content) in contents {

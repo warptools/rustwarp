@@ -1,10 +1,10 @@
+use crossbeam_channel::Sender;
 use indexmap::IndexMap;
 use oci_unpack::{pull_and_unpack, PullConfig};
 use rand::distributions::{Alphanumeric, DistString};
-use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
-use tokio::sync::mpsc;
+use std::{fs, thread};
 use warpforge_api::content::Packtype;
 use warpforge_api::formula::{
 	self, Action, ActionScript, FormulaAndContext, FormulaInput, GatherDirective, Mount,
@@ -24,7 +24,7 @@ pub struct Formula<'a> {
 	pub(crate) context: &'a Context,
 }
 
-pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<Vec<Output>> {
+pub fn run_formula(formula: FormulaAndContext, context: &Context) -> Result<Vec<Output>> {
 	let temporary_dir = tempfile::tempdir().map_err(|err| Error::SystemSetupError {
 		msg: "failed to setup temporary dir".into(),
 		cause: Box::new(err),
@@ -38,10 +38,10 @@ pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Resul
 		context,
 	};
 
-	let (event_sender, mut event_receiver) = mpsc::channel::<Event>(32);
+	let (event_sender, event_receiver) = crossbeam_channel::bounded::<Event>(32);
 
-	let event_handler = tokio::spawn(async move {
-		while let Some(event) = event_receiver.recv().await {
+	let event_handler = thread::spawn(move || {
+		while let Ok(event) = event_receiver.recv() {
 			match &event.body {
 				EventBody::Output { val, .. } => logln!("[container] {val}\n"),
 				EventBody::ExitCode(code) => return *code,
@@ -51,12 +51,9 @@ pub async fn run_formula(formula: FormulaAndContext, context: &Context) -> Resul
 		None
 	});
 
-	let outputs = executor.run(formula, event_sender).await?;
+	let outputs = executor.run(formula, event_sender)?;
 
-	let exit_code = event_handler.await.map_err(|e| Error::SystemRuntimeError {
-		msg: "unexpected error while running container".into(),
-		cause: Box::new(e),
-	})?;
+	let exit_code = event_handler.join().unwrap();
 	match exit_code {
 		Some(0) => Ok(outputs),
 		_ => Err(Error::SystemRuntimeError {
@@ -151,10 +148,10 @@ impl<'a> Formula<'a> {
 		])
 	}
 
-	pub async fn run(
+	pub fn run(
 		&self,
 		formula_and_context: FormulaAndContext,
-		outbox: mpsc::Sender<Event>,
+		outbox: Sender<Event>,
 	) -> Result<Vec<Output>> {
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
@@ -191,12 +188,12 @@ impl<'a> Formula<'a> {
 			cache: self.context.image_cache.clone(),
 			..PullConfig::default()
 		};
-		pull_and_unpack(&reference, &bundle_path, &pull_config)
-			.await
-			.map_err(|err| Error::SystemSetupError {
+		pull_and_unpack(&reference, &bundle_path, &pull_config).map_err(|err| {
+			Error::SystemSetupError {
 				msg: "failed to obtain image".into(),
 				cause: Box::new(err),
-			})?;
+			}
+		})?;
 
 		set_lower_position(3);
 
@@ -208,7 +205,7 @@ impl<'a> Formula<'a> {
 			environment,
 			root_path: bundle_path.join("rootfs"),
 		};
-		self.executor.run(&params, outbox).await?;
+		self.executor.run(&params, outbox)?;
 
 		set_lower_position(5);
 

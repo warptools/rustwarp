@@ -9,7 +9,6 @@ warpforge-executors = { path = "../warpforge-executors" }
 warpforge-terminal = { path = "../warpforge-terminal" }
 warpforge-visualize = { path = "../warpforge-visualize" }
 
-tokio.workspace = true
 clap = { version = "4.3.0", features = ["derive"] }
 serde = { version = "1" }
 serde_json = { version = "1" }

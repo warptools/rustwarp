@@ -10,8 +10,8 @@ use crate::{
 	Digest, Output,
 };
 
-#[tokio::test]
-async fn formula_exec_runc_output() {
+#[test]
+fn formula_exec_runc_output() {
 	let temp_dir = TempDir::new().unwrap();
 
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
@@ -49,9 +49,7 @@ async fn formula_exec_runc_output() {
 	let mut context = default_context();
 	context.output_path = Some(temp_dir.path().into());
 
-	let result = run_formula_collect_output(formula_and_context, &context)
-		.await
-		.unwrap();
+	let result = run_formula_collect_output(formula_and_context, &context).unwrap();
 
 	assert_eq!(result.exit_code, Some(0));
 	assert_eq!(result.outputs, vec![Output {
@@ -72,8 +70,8 @@ async fn formula_exec_runc_output() {
 	assert!(entries.next().is_none());
 }
 
-#[tokio::test]
-async fn formula_exec_runc_multiple_outputs() {
+#[test]
+fn formula_exec_runc_multiple_outputs() {
 	let temp_dir = TempDir::new().unwrap();
 
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
@@ -118,9 +116,7 @@ async fn formula_exec_runc_multiple_outputs() {
 	let mut context = default_context();
 	context.output_path = Some(temp_dir.path().into());
 
-	let result = run_formula_collect_output(formula_and_context, &context)
-		.await
-		.unwrap();
+	let result = run_formula_collect_output(formula_and_context, &context).unwrap();
 
 	assert_eq!(result.exit_code, Some(0));
 	assert_eq!(result.outputs, vec![

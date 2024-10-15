@@ -36,7 +36,6 @@ use oci_client::{
 };
 use oci_spec::image::ImageConfiguration;
 use sha2::{Digest, Sha256};
-use tokio::task;
 
 pub use crate::config::PullConfig;
 pub use crate::error::{Error, Result};
@@ -59,12 +58,12 @@ pub struct BundleInfo {
 	pub manifest_digest: String,
 }
 
-pub async fn pull_and_unpack(
+pub fn pull_and_unpack(
 	image: &Reference,
 	target: impl AsRef<Path>,
 	config: &PullConfig,
 ) -> Result<BundleInfo> {
-	let image_data = pull_image(image, config).await?;
+	let image_data = pull_image(image, config)?;
 
 	let manifest = image_data.manifest.unwrap();
 	let manifest_digest = image_data.digest.unwrap();
@@ -78,8 +77,7 @@ pub async fn pull_and_unpack(
 		config,
 	};
 
-	let target = target.as_ref().to_owned();
-	task::spawn_blocking(move || unpack(target, image_data)).await?
+	unpack(target, image_data)
 }
 
 pub fn unpack(
@@ -143,17 +141,19 @@ pub struct ImageData {
 	config: ImageConfiguration,
 }
 
+#[tokio::main]
 pub async fn pull_image(
 	image: &Reference,
 	config: &PullConfig,
 ) -> Result<oci_client::client::ImageData> {
 	let mut cache = Cache::new(config);
-	if let Some(image_data) = cache.before_pull(image).await? {
+	if let Some(image_data) = cache.before_pull(image)? {
 		return Ok(image_data);
 	}
 
 	let client = Client::new(ClientConfig::default());
 	let media_types = LAYER_MEDIA_TYPES.to_vec();
+
 	let image_data = client.pull(image, &config.auth, media_types).await?;
 
 	cache

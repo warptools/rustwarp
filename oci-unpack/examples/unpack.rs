@@ -6,8 +6,7 @@ use std::{
 
 use oci_unpack::{pull_and_unpack, PullConfig};
 
-#[tokio::main]
-async fn main() {
+fn main() {
 	let args: Vec<String> = env::args().collect();
 	if args.len() != 3 {
 		eprintln!("usage: {} <image> <target>", args[0]);
@@ -26,7 +25,7 @@ async fn main() {
 
 	let target: PathBuf = args[2].clone().into();
 
-	match pull_and_unpack(&reference, &target, &PullConfig::default()).await {
+	match pull_and_unpack(&reference, target, &PullConfig::default()) {
 		Ok(info) => println!("{:#?}", info.manifest),
 		Err(error) => {
 			eprintln!("unpacking failed: {error}");

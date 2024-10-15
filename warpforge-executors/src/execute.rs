@@ -1,11 +1,11 @@
-use std::fs;
+use std::io::{BufRead, BufReader, Lines};
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::thread;
+use std::{fs, process::Command};
 
+use crossbeam_channel::Sender;
 use str_cat::os_str_cat;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
-use tokio::select;
 
 use crate::{Error, Result};
 
@@ -26,13 +26,9 @@ pub struct Executor {
 }
 
 impl Executor {
-	pub async fn run(
-		&self,
-		task: &crate::ContainerParams,
-		outbox: tokio::sync::mpsc::Sender<crate::Event>,
-	) -> Result<()> {
+	pub fn run(&self, task: &crate::ContainerParams, outbox: Sender<crate::Event>) -> Result<()> {
 		self.prep_bundledir(task)?;
-		self.container_exec(task, outbox).await?;
+		self.container_exec(task, outbox)?;
 		Ok(())
 	}
 
@@ -126,10 +122,10 @@ impl Executor {
 		Ok(())
 	}
 
-	async fn container_exec(
+	fn container_exec(
 		&self,
 		task: &crate::ContainerParams,
-		outbox: tokio::sync::mpsc::Sender<crate::Event>,
+		outbox: Sender<crate::Event>,
 	) -> Result<()> {
 		let mut cmd = Command::new(&task.runtime);
 		cmd.arg(os_str_cat!("--log=", self.log_file));
@@ -160,53 +156,67 @@ impl Executor {
 
 		// Take handles to the IO before we spawn the exit wait.
 		// (The exit wait future takes ownership of the `child` value.)
-		let stdout = child
-			.stdout
-			.take()
-			.expect("child did not have a handle to stdout");
-		let stderr = child
-			.stderr
-			.take()
-			.expect("child did not have a handle to stderr");
+		let stdout = BufReader::new(
+			child
+				.stdout
+				.take()
+				.expect("child did not have a handle to stdout"),
+		);
+		let stderr = BufReader::new(
+			child
+				.stderr
+				.take()
+				.expect("child did not have a handle to stderr"),
+		);
 
-		let mut stdout = BufReader::new(stdout).lines();
-		let mut stderr = BufReader::new(stderr).lines();
+		let handle = {
+			let outbox = outbox.clone();
+			let task_ident = task.ident.to_owned();
+			thread::spawn::<_, std::io::Result<()>>(move || {
+				Self::send_container_output(&task_ident, &outbox, 2, stderr.lines())
+			})
+		};
 
-		loop {
-			select! {
-				line = stdout.next_line() => Self::send_container_output(&task.ident, &outbox, 1, line).await?,
-				line = stderr.next_line() => Self::send_container_output(&task.ident, &outbox, 2, line).await?,
-				status = child.wait() => {
-					let status = status.expect("child process encountered an error");
-					outbox
-						.send(crate::Event {
-							topic: task.ident.to_owned(),
-							body: crate::events::EventBody::ExitCode(status.code()),
-						})
-						.await
-						.expect("channel must not be closed");
-					break Ok(());
-				}
+		Self::send_container_output(&task.ident, &outbox, 1, stdout.lines()).map_err(|e| {
+			Error::Catchall {
+				msg: "failed to read stdout from container".to_owned(),
+				cause: Box::new(e),
 			}
-		}
+		})?;
+
+		handle.join().unwrap().map_err(|e| Error::Catchall {
+			msg: "failed to read stderr from container".to_owned(),
+			cause: Box::new(e),
+		})?;
+
+		let status = child.wait().map_err(|err| Error::SystemRuntimeError {
+			msg: "failed to get child exit code".into(),
+			cause: Box::new(err),
+		})?;
+
+		outbox
+			.send(crate::Event {
+				topic: task.ident.to_owned(),
+				body: crate::events::EventBody::ExitCode(status.code()),
+			})
+			.expect("channel must not be closed");
+
+		Ok(())
 	}
 
-	async fn send_container_output(
+	fn send_container_output<T: BufRead>(
 		ident: &str,
-		outbox: &tokio::sync::mpsc::Sender<crate::Event>,
+		outbox: &Sender<crate::Event>,
 		channel: i32,
-		line: std::io::Result<Option<String>>,
-	) -> Result<()> {
-		if let Some(line) = line.map_err(|e| Error::Catchall {
-			msg: "system io error communicating with subprocess during executor run".to_owned(),
-			cause: Box::new(e),
-		})? {
+		lines: Lines<T>,
+	) -> std::io::Result<()> {
+		for line in lines {
+			let line = line?;
 			outbox
 				.send(crate::Event {
 					topic: ident.to_owned(),
 					body: crate::events::EventBody::Output { channel, val: line },
 				})
-				.await
 				.expect("channel must not be closed");
 		}
 
@@ -216,17 +226,16 @@ impl Executor {
 
 #[cfg(test)]
 mod tests {
-	use std::path::PathBuf;
+	use std::{path::PathBuf, thread};
 
 	use indexmap::IndexMap;
 	use oci_unpack::{pull_and_unpack, PullConfig};
 	use tempfile::TempDir;
-	use tokio::sync::mpsc;
 
 	use crate::events::EventBody;
 
-	#[tokio::test]
-	async fn execute_it_works() {
+	#[test]
+	fn execute_it_works() {
 		let temp_dir = TempDir::new().unwrap();
 		let path = temp_dir.path();
 
@@ -236,15 +245,13 @@ mod tests {
 			cache: Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.images")),
 			..Default::default()
 		};
-		pull_and_unpack(image, &bundle_path, &pull_config)
-			.await
-			.unwrap();
+		pull_and_unpack(image, &bundle_path, &pull_config).unwrap();
 
 		let cfg = crate::execute::Executor {
 			ersatz_dir: path.join("run"),
 			log_file: path.join("log"),
 		};
-		let (gather_chan, mut gather_chan_recv) = mpsc::channel::<crate::events::Event>(32);
+		let (gather_chan, gather_chan_recv) = crossbeam_channel::bounded::<crate::Event>(32);
 		let params = crate::ContainerParams {
 			ident: "containernamegoeshere".into(),
 			runtime: "runc".into(),
@@ -262,9 +269,8 @@ mod tests {
 			]),
 		};
 
-		// empty gather_chan
-		let gather_handle = tokio::spawn(async move {
-			while let Some(evt) = gather_chan_recv.recv().await {
+		let gather_handle = thread::spawn(move || {
+			while let Ok(evt) = gather_chan_recv.recv() {
 				match &evt.body {
 					EventBody::Output { val, channel: 1 } => println!("[container] {val}"),
 					EventBody::Output { val, channel: 2 } => eprintln!("[container] {val}"),
@@ -277,7 +283,7 @@ mod tests {
 			}
 		});
 
-		cfg.run(&params, gather_chan).await.expect("it didn't fail");
-		gather_handle.await.expect("gathering events failed");
+		cfg.run(&params, gather_chan).expect("it didn't fail");
+		gather_handle.join().expect("gathering events failed");
 	}
 }

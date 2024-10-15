@@ -1,7 +1,5 @@
 use std::path::PathBuf;
 
-use tokio::task::JoinError;
-
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -38,9 +36,6 @@ pub enum Error {
 
 	#[error("config: unsupported rootfs.type: {typ}")]
 	UnsupportedRootFSType { typ: String },
-
-	#[error("tokio: {0}")]
-	TokioError(#[from] JoinError),
 
 	#[error("failed to obtain image cache lock: '{0}'")]
 	CacheLockTimeout(PathBuf),

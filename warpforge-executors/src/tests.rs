@@ -1,7 +1,6 @@
-use std::{env, path::PathBuf};
+use std::{env, path::PathBuf, thread};
 
 use tempfile::TempDir;
-use tokio::sync::mpsc;
 use warpforge_api::formula::FormulaAndContext;
 
 use crate::{
@@ -33,7 +32,7 @@ fn default_context() -> Context {
 	}
 }
 
-async fn run_formula_collect_output(
+fn run_formula_collect_output(
 	formula_and_context: FormulaAndContext,
 	context: &Context,
 ) -> Result<RunOutput> {
@@ -42,15 +41,15 @@ async fn run_formula_collect_output(
 		ersatz_dir: tempdir.path().join("run"),
 		log_file: tempdir.path().join("log"),
 	};
-	let (gather_chan, mut gather_chan_recv) = mpsc::channel::<Event>(32);
+	let (gather_chan, gather_chan_recv) = crossbeam_channel::bounded::<Event>(32);
 
 	let formula = Formula { executor, context };
 
-	let gather_handle = tokio::spawn(async move {
+	let gather_handle = thread::spawn(move || {
 		let mut outputs = Vec::new();
 		let mut exit_code = None;
 
-		while let Some(evt) = gather_chan_recv.recv().await {
+		while let Ok(evt) = gather_chan_recv.recv() {
 			match evt.body {
 				EventBody::Output { channel, val: line } => {
 					println!("[container:{channel}] {line}");
@@ -70,9 +69,9 @@ async fn run_formula_collect_output(
 		}
 	});
 
-	let outputs = formula.run(formula_and_context, gather_chan).await?;
+	let outputs = formula.run(formula_and_context, gather_chan)?;
 
-	let mut run_output = gather_handle.await.expect("gathering events failed");
+	let mut run_output = gather_handle.join().expect("gathering events failed");
 	run_output.outputs = outputs;
 	Ok(run_output)
 }

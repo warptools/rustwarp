@@ -15,7 +15,7 @@ use crate::{to_string_or_panic, Error, Output, Result};
 
 const OUTPUTS_DIR: &str = "outputs";
 
-pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<Vec<Output>> {
+pub fn run_plot(plot: PlotCapsule, context: &Context) -> Result<Vec<Output>> {
 	let PlotCapsule::V1(plot) = &plot;
 
 	let graph = PlotGraph::new(plot);
@@ -33,7 +33,6 @@ pub async fn run_plot(plot: PlotCapsule, context: &Context) -> Result<Vec<Output
 		temp_dir,
 	}
 	.run()
-	.await
 }
 
 #[allow(unused)]
@@ -45,7 +44,7 @@ struct PlotExecutor<'a> {
 }
 
 impl<'a> PlotExecutor<'a> {
-	async fn run(&self) -> Result<Vec<Output>> {
+	fn run(&self) -> Result<Vec<Output>> {
 		set_upper("plot");
 		set_upper_max(self.plot.steps.len() as u64);
 		set_upper_position(0);
@@ -61,7 +60,7 @@ impl<'a> PlotExecutor<'a> {
 		// TODO: Run multiple steps in parallel, when possible.
 		let mut completed_count = 0;
 		while let Some(step_name) = next_steps.pop() {
-			self.run_step(step_name).await?;
+			self.run_step(step_name)?;
 
 			completed_count += 1;
 			set_upper_position(completed_count);
@@ -95,7 +94,7 @@ impl<'a> PlotExecutor<'a> {
 		pack_outputs(&self.context.output_path, &outputs)
 	}
 
-	async fn run_step(&self, step_name: &str) -> Result<()> {
+	fn run_step(&self, step_name: &str) -> Result<()> {
 		let Step::Protoformula(step) = self.graph.nodes[step_name] else {
 			todo!(); // TODO: Implement sub-plots.
 		};
@@ -154,7 +153,7 @@ impl<'a> PlotExecutor<'a> {
 				warehouses: IndexMap::with_capacity(0),
 			}),
 		};
-		let outputs = run_formula(formula, &context).await.map_err(|err| {
+		let outputs = run_formula(formula, &context).map_err(|err| {
 			let msg = format!("failed step '{step_name}'");
 			let cause = Box::new(err);
 			Error::SystemRuntimeError { msg, cause }

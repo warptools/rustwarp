@@ -8,8 +8,9 @@ oci-spec = "*"
 file-mode = "*"
 flate2 = "*"
 filetime = "*"
-# Disable crossbeam-channel to make sure notify will work correctly with tokio.
-notify = { version = "*", default-features = false, features = ["macos_kqueue"] }
+# Using tokio so we can correctly use oci-client.
+# Using runtimes like async-std or futures-executor lead to problems while testing.
+tokio = { version = "*", features = ["rt-multi-thread"] }
 
 oci-client.workspace = true
 thiserror.workspace = true
@@ -17,9 +18,4 @@ serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
-tokio.workspace = true
 indexmap.workspace = true
-
-[dev-dependencies]
-# Used for example binary.
-tokio.workspace = true

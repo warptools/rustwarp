@@ -4,8 +4,8 @@ use warpforge_api::plot::PlotCapsule;
 
 use crate::{context::Context, plot::run_plot, tests::default_context, Output};
 
-#[tokio::test]
-async fn plot_simple_steps() {
+#[test]
+fn plot_simple_steps() {
 	let plot: PlotCapsule = serde_json::from_value(json!({
 		"plot.v1": {
 			"image": {
@@ -77,7 +77,7 @@ async fn plot_simple_steps() {
 		..default_context()
 	};
 
-	let outputs = run_plot(plot, &context).await.unwrap();
+	let outputs = run_plot(plot, &context).unwrap();
 
 	assert_eq!(outputs, vec![Output{
 		name: "output.tar".into(),
@@ -85,8 +85,8 @@ async fn plot_simple_steps() {
 	}]);
 }
 
-#[tokio::test]
-async fn plot_simple_steps_magled_order() {
+#[test]
+fn plot_simple_steps_magled_order() {
 	let plot: PlotCapsule = serde_json::from_value(json!({
 		"plot.v1": {
 			"image": {
@@ -158,7 +158,7 @@ async fn plot_simple_steps_magled_order() {
 		..default_context()
 	};
 
-	let outputs = run_plot(plot, &context).await.unwrap();
+	let outputs = run_plot(plot, &context).unwrap();
 
 	assert_eq!(outputs, vec![Output{
 		name: "output.tar".into(),

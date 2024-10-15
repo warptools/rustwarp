@@ -9,7 +9,7 @@ warpforge-terminal = { path = "../warpforge-terminal" }
 oci-unpack = { path = "../oci-unpack" }
 
 thiserror.workspace = true
-tokio.workspace = true
+crossbeam-channel.workspace = true
 indexmap.workspace = true
 serde_json.workspace = true
 str-cat.workspace = true

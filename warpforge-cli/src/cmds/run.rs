@@ -28,17 +28,17 @@ pub struct Cmd {
 	pub runtime: PathBuf,
 }
 
-pub async fn execute(_cli: &Root, cmd: &Cmd) -> Result<(), Error> {
+pub fn execute(_cli: &Root, cmd: &Cmd) -> Result<(), Error> {
 	let Some(target) = &cmd.target else {
 		let path = current_dir().map_err(|e| Error::BizarreEnvironment { cause: Box::new(e) })?;
-		return execute_module(cmd, &path).await;
+		return execute_module(cmd, path);
 	};
 
 	let meta = fs::metadata(target).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 	if meta.is_dir() {
-		execute_module(cmd, target).await
+		execute_module(cmd, target)
 	} else if meta.is_file() {
-		execute_formula(cmd, target).await
+		execute_formula(cmd, target)
 	} else {
 		Err(Error::InvalidArguments {
 			cause: "invalid target: 'run' requires an existing file or directory".into(),
@@ -46,7 +46,7 @@ pub async fn execute(_cli: &Root, cmd: &Cmd) -> Result<(), Error> {
 	}
 }
 
-async fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
+fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 	if !path.as_ref().join(MAGIC_FILENAME_MODULE).is_file() {
 		return Err(Error::InvalidArguments {
 			cause: format!(
@@ -57,8 +57,7 @@ async fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> 
 	}
 
 	let plot_path = path.as_ref().join(MAGIC_FILENAME_PLOT);
-	let file =
-		File::open(&plot_path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
+	let file = File::open(plot_path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 	let reader = BufReader::new(file);
 	let plot: PlotCapsule =
 		serde_json::from_reader(reader).map_err(|e| Error::InvalidArguments {
@@ -71,7 +70,7 @@ async fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> 
 		mount_path: Some(parent),
 		..Default::default()
 	};
-	let outputs = run_plot(plot, &context).await?;
+	let outputs = run_plot(plot, &context)?;
 
 	for output in outputs {
 		let warpforge_executors::Output {
@@ -84,7 +83,7 @@ async fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> 
 	Ok(())
 }
 
-async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
+fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 	let file = File::open(&path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
 	let reader = BufReader::new(file);
 	let formula: FormulaAndContext =
@@ -98,7 +97,7 @@ async fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error>
 		mount_path: Some(parent),
 		..Default::default()
 	};
-	let outputs = run_formula(formula, &context).await?;
+	let outputs = run_formula(formula, &context)?;
 
 	for output in outputs {
 		let warpforge_executors::Output {

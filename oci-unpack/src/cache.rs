@@ -2,9 +2,11 @@
 // TODO: GC function to remove orpahn blobs.
 
 use std::{
-	io::ErrorKind,
+	fs::{self, OpenOptions},
+	io::{ErrorKind, Write},
 	path::{Path, PathBuf},
-	time::Duration,
+	thread::sleep,
+	time::{Duration, Instant},
 };
 
 use indexmap::{map, IndexMap};
@@ -15,12 +17,6 @@ use oci_client::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::{
-	fs::{self, OpenOptions},
-	io::AsyncWriteExt,
-	select,
-	time::{interval, sleep_until, Instant},
-};
 
 use crate::{Error, PullConfig, Result};
 
@@ -49,7 +45,7 @@ impl<'a> Drop for Cache<'a> {
 	fn drop(&mut self) {
 		if self.has_lock {
 			let path = self.config.cache.as_ref().unwrap().join(LOCK_FILE);
-			tokio::spawn(async move { fs::remove_file(path).await });
+			fs::remove_file(path).expect("failed to remove cache lock file");
 		}
 	}
 }
@@ -62,16 +58,16 @@ impl<'a> Cache<'a> {
 		}
 	}
 
-	pub(crate) async fn before_pull(&mut self, image: &Reference) -> Result<Option<ImageData>> {
+	pub(crate) fn before_pull(&mut self, image: &Reference) -> Result<Option<ImageData>> {
 		let Some(cache_dir) = &self.config.cache else {
 			return Ok(None);
 		};
 
 		if !cache_dir.is_dir() {
-			init_cache(cache_dir).await?;
+			init_cache(cache_dir)?;
 		}
 
-		match image_from_reference(cache_dir, image).await {
+		match image_from_reference(cache_dir, image) {
 			Ok(None) | Err(Error::ParseCacheIndex(_)) => {}
 			result @ (Ok(Some(_)) | Err(_)) => return result,
 		}
@@ -79,10 +75,10 @@ impl<'a> Cache<'a> {
 		// Trying to lock index. We do this, because we are going to report
 		// a cache miss and therefore trigger a pull from the registry next.
 		// To prevent redundant downloads (e.g. during testing), we lock here.
-		self.lock_index(cache_dir).await?;
+		self.lock_index(cache_dir)?;
 
 		// Prevent race condition: check again if we do not have image by now.
-		if let Some(image_data) = image_from_reference(cache_dir, image).await? {
+		if let Some(image_data) = image_from_reference(cache_dir, image)? {
 			return Ok(Some(image_data));
 		}
 
@@ -112,24 +108,19 @@ impl<'a> Cache<'a> {
 			.await?;
 		assert_eq!(digest, &digest_raw);
 
-		add_image_to_cache(cache_dir, image, image_data, &manifest_raw).await
+		add_image_to_cache(cache_dir, image, image_data, &manifest_raw)
 	}
 
-	async fn lock_index(&mut self, cache_dir: impl AsRef<Path>) -> Result<()> {
+	fn lock_index(&mut self, cache_dir: impl AsRef<Path>) -> Result<()> {
 		if self.has_lock {
 			return Ok(());
 		}
 
 		let path = cache_dir.as_ref().join(LOCK_FILE);
-		let deadline = Instant::now() + CACHE_LOCK_TIMEOUT;
+		let start = Instant::now();
 
 		loop {
-			match OpenOptions::new()
-				.write(true)
-				.create_new(true)
-				.open(&path)
-				.await
-			{
+			match OpenOptions::new().write(true).create_new(true).open(&path) {
 				Ok(_) => {
 					self.has_lock = true;
 					return Ok(());
@@ -138,16 +129,11 @@ impl<'a> Cache<'a> {
 				_ => {
 					// Lock file already exists: wait and try again.
 					// TODO: Use notify instead of polling repeatedly.
-					let mut check_interval = interval(Duration::from_millis(50));
-					loop {
-						select! {
-							_ = check_interval.tick() => {
-								if !path.exists() {
-									break;
-								}
-							}
-							_ = sleep_until(deadline) => return Err(Error::CacheLockTimeout(path))
+					while path.exists() {
+						if start.elapsed() >= CACHE_LOCK_TIMEOUT {
+							return Err(Error::CacheLockTimeout(path));
 						}
+						sleep(Duration::from_millis(50));
 					}
 				}
 			}
@@ -155,31 +141,33 @@ impl<'a> Cache<'a> {
 	}
 }
 
-async fn get_index(cache_dir: impl AsRef<Path>) -> Result<Index> {
-	async fn get_index_raw(cache_dir: impl AsRef<Path>) -> Result<Index> {
-		let contents = fs::read(cache_dir.as_ref().join(INDEX_FILE)).await?;
+fn get_index(cache_dir: impl AsRef<Path>) -> Result<Index> {
+	fn get_index_raw(cache_dir: impl AsRef<Path>) -> Result<Index> {
+		let contents = fs::read(cache_dir.as_ref().join(INDEX_FILE))?;
 		serde_json::from_slice(&contents[..]).map_err(Error::ParseCacheIndex)
 	}
 
-	match get_index_raw(&cache_dir).await {
+	match get_index_raw(&cache_dir) {
 		Ok(index) => Ok(index),
-		Err(_) => get_index_raw(&cache_dir).await, // retry
+		Err(_) => {
+			sleep(Duration::from_millis(100));
+			get_index_raw(&cache_dir) // retry
+		}
 	}
 }
 
-async fn init_cache(cache_dir: impl AsRef<Path>) -> Result<()> {
-	fs::create_dir_all(cache_dir.as_ref().join(BLOBS_DIR)).await?;
+fn init_cache(cache_dir: impl AsRef<Path>) -> Result<()> {
+	fs::create_dir_all(cache_dir.as_ref().join(BLOBS_DIR))?;
 
-	let file = (OpenOptions::new().write(true).create_new(true))
-		.open(cache_dir.as_ref().join(INDEX_FILE))
-		.await;
+	let file =
+		(OpenOptions::new().write(true).create_new(true)).open(cache_dir.as_ref().join(INDEX_FILE));
 	match file {
 		Ok(mut file) => {
 			let index = Index {
 				images: IndexMap::with_capacity(0),
 			};
 			let data = serde_json::to_vec(&index).map_err(Error::ParseCacheIndex)?;
-			file.write_all(&data[..]).await?;
+			file.write_all(&data[..])?;
 		}
 		Err(error) if error.kind() != ErrorKind::AlreadyExists => return Err(error.into()),
 		_ => {}
@@ -188,28 +176,29 @@ async fn init_cache(cache_dir: impl AsRef<Path>) -> Result<()> {
 	Ok(())
 }
 
-async fn image_from_reference(
+fn image_from_reference(
 	cache_dir: impl AsRef<Path>,
 	image: &Reference,
 ) -> Result<Option<ImageData>> {
-	let mut index = get_index(&cache_dir).await?;
+	let mut index = get_index(&cache_dir)?;
 	if let map::Entry::Occupied(entry) = index.images.entry(image.whole()) {
-		return Ok(Some(
-			image_from_blobs(cache_dir, &entry.get().manifest_digest).await?,
-		));
+		return Ok(Some(image_from_blobs(
+			cache_dir,
+			&entry.get().manifest_digest,
+		)?));
 	}
 	Ok(None)
 }
 
-async fn image_from_blobs(cache_dir: impl AsRef<Path>, manifest_digest: &str) -> Result<ImageData> {
+fn image_from_blobs(cache_dir: impl AsRef<Path>, manifest_digest: &str) -> Result<ImageData> {
 	let blob_dir = cache_dir.as_ref().join(BLOBS_DIR);
 
-	let manifest_data = read_blob(&blob_dir, manifest_digest).await?;
+	let manifest_data = read_blob(&blob_dir, manifest_digest)?;
 	let manifest: OciImageManifest =
 		serde_json::from_slice(&manifest_data[..]).map_err(Error::ParseManifest)?;
 
 	let config_digest = &manifest.config.digest;
-	let config_data = read_blob(&blob_dir, config_digest).await?;
+	let config_data = read_blob(&blob_dir, config_digest)?;
 	let config = oci_client::client::Config {
 		data: config_data,
 		media_type: manifest.config.media_type.to_owned(),
@@ -218,7 +207,7 @@ async fn image_from_blobs(cache_dir: impl AsRef<Path>, manifest_digest: &str) ->
 
 	let mut layers = Vec::new();
 	for layer in &manifest.layers {
-		let data = read_blob(&blob_dir, &layer.digest).await?;
+		let data = read_blob(&blob_dir, &layer.digest)?;
 		layers.push(ImageLayer {
 			data,
 			media_type: layer.media_type.clone(),
@@ -234,7 +223,7 @@ async fn image_from_blobs(cache_dir: impl AsRef<Path>, manifest_digest: &str) ->
 	})
 }
 
-async fn add_image_to_cache(
+fn add_image_to_cache(
 	cache_dir: impl AsRef<Path>,
 	image: &Reference,
 	image_data: &ImageData,
@@ -243,19 +232,19 @@ async fn add_image_to_cache(
 	let blob_dir = cache_dir.as_ref().join(BLOBS_DIR);
 
 	let digest = image_data.digest.as_ref().unwrap();
-	add_blob_to_cache(&blob_dir, digest, manifest_raw).await?;
+	add_blob_to_cache(&blob_dir, digest, manifest_raw)?;
 
 	let config_digest = &image_data.manifest.as_ref().unwrap().config.digest;
-	add_blob_to_cache(&blob_dir, config_digest, &image_data.config.data[..]).await?;
+	add_blob_to_cache(&blob_dir, config_digest, &image_data.config.data[..])?;
 
 	let manifest_layers = &image_data.manifest.as_ref().unwrap().layers;
 	assert_eq!(manifest_layers.len(), image_data.layers.len());
 	for (i, layer) in image_data.layers.iter().enumerate() {
-		add_blob_to_cache(&blob_dir, &manifest_layers[i].digest, &layer.data[..]).await?;
+		add_blob_to_cache(&blob_dir, &manifest_layers[i].digest, &layer.data[..])?;
 	}
 
 	let index_path = cache_dir.as_ref().join(INDEX_FILE);
-	let mut index = get_index(&cache_dir).await?;
+	let mut index = get_index(&cache_dir)?;
 	index.images.insert(
 		image.whole(),
 		IndexImage {
@@ -263,12 +252,12 @@ async fn add_image_to_cache(
 		},
 	);
 	let index_bytes = serde_json::to_vec(&index).unwrap();
-	fs::write(index_path, &index_bytes[..]).await?;
+	fs::write(index_path, &index_bytes[..])?;
 
 	Ok(())
 }
 
-async fn add_blob_to_cache(
+fn add_blob_to_cache(
 	blob_dir: impl AsRef<Path>,
 	digest: &str,
 	data: impl AsRef<[u8]>,
@@ -281,13 +270,13 @@ async fn add_blob_to_cache(
 
 	let colon = digest.find(':').unwrap();
 	let blob_path = blob_path(blob_dir, digest, colon);
-	fs::create_dir_all(&blob_path).await?;
-	Ok(fs::write(blob_path.join(&digest[colon + 1..]), data).await?)
+	fs::create_dir_all(&blob_path)?;
+	Ok(fs::write(blob_path.join(&digest[colon + 1..]), data)?)
 }
 
-async fn read_blob(blob_dir: impl AsRef<Path>, digest: &str) -> Result<Vec<u8>> {
+fn read_blob(blob_dir: impl AsRef<Path>, digest: &str) -> Result<Vec<u8>> {
 	let colon = digest.find(':').unwrap();
-	let data = fs::read(blob_path(blob_dir, digest, colon).join(&digest[colon + 1..])).await?;
+	let data = fs::read(blob_path(blob_dir, digest, colon).join(&digest[colon + 1..]))?;
 
 	let actual = format!("sha256:{:x}", Sha256::digest(&data));
 	if actual != digest {

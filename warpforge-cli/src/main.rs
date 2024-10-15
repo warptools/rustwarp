@@ -12,11 +12,10 @@ mod errors;
 
 use errors::*;
 
-#[tokio::main]
-async fn main() {
+fn main() {
 	Logger::set_global(Logger::new_local()).unwrap();
 
-	let result = main2().await;
+	let result = main2();
 	if let Err(e) = &result {
 		logln!("{}", e);
 	}
@@ -29,7 +28,7 @@ async fn main() {
 	}
 }
 
-async fn main2() -> Result<(), Error> {
+fn main2() -> Result<(), Error> {
 	let cli = match cmds::Root::try_parse() {
 		Ok(arguments) => arguments,
 		Err(e) if matches!(e.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) => {
@@ -49,7 +48,7 @@ async fn main2() -> Result<(), Error> {
 	//   - 1: to receive the command object with all parents.
 	//   - 2: to have a func on my command strugs that receives a call, rather than have to make this dispatch table.
 	match &cli.subcommand {
-		Some(cmds::Subcommands::Run(cmd)) => return cmds::run::execute(&cli, cmd).await,
+		Some(cmds::Subcommands::Run(cmd)) => return cmds::run::execute(&cli, cmd),
 		Some(cmds::Subcommands::Catalog(cmd)) => match &cmd.subcommand {
 			cmds::catalog::Subcommands::ReadItem(cmd) => {
 				let user_home = env::var("HOME")

@@ -6,8 +6,8 @@ use warpforge_api::formula::FormulaAndContext;
 
 use crate::tests::{default_context, run_formula_collect_output};
 
-#[tokio::test]
-async fn runc_rbind_mounts() {
+#[test]
+fn runc_rbind_mounts() {
 	let temp_dir = TempDir::new().unwrap();
 	let input_dir = temp_dir.path().join("ro");
 	let output_dir = temp_dir.path().join("rw");
@@ -54,9 +54,7 @@ async fn runc_rbind_mounts() {
 	}))
 	.expect("failed to parse formula json");
 
-	let result = run_formula_collect_output(formula_and_context, &default_context())
-		.await
-		.unwrap();
+	let result = run_formula_collect_output(formula_and_context, &default_context()).unwrap();
 
 	assert_eq!(result.exit_code, Some(0));
 	for (name, content) in contents {
@@ -64,8 +62,8 @@ async fn runc_rbind_mounts() {
 	}
 }
 
-#[tokio::test]
-async fn runc_rbind_mounts_relative_path() {
+#[test]
+fn runc_rbind_mounts_relative_path() {
 	let temp_dir = TempDir::new().unwrap();
 	let input_dir = temp_dir.path().join("ro_dir");
 	let output_dir = temp_dir.path().join("nested").join("rw_dir");
@@ -115,9 +113,7 @@ async fn runc_rbind_mounts_relative_path() {
 	let mut context = default_context();
 	context.mount_path = Some(temp_dir.path().to_owned());
 
-	let result = run_formula_collect_output(formula_and_context, &context)
-		.await
-		.unwrap();
+	let result = run_formula_collect_output(formula_and_context, &context).unwrap();
 
 	assert_eq!(result.exit_code, Some(0));
 	for (name, content) in contents {
@@ -125,8 +121,8 @@ async fn runc_rbind_mounts_relative_path() {
 	}
 }
 
-#[tokio::test]
-async fn runc_cannot_write_to_ro_mount() {
+#[test]
+fn runc_cannot_write_to_ro_mount() {
 	let temp_dir = TempDir::new().unwrap();
 	let input_dir = temp_dir.path().join("ro");
 	fs::create_dir(&input_dir).unwrap();
@@ -161,9 +157,7 @@ async fn runc_cannot_write_to_ro_mount() {
 	}))
 	.expect("failed to parse formula json");
 
-	let result = run_formula_collect_output(formula_and_context, &default_context())
-		.await
-		.unwrap();
+	let result = run_formula_collect_output(formula_and_context, &default_context()).unwrap();
 
 	assert_ne!(result.exit_code, Some(0));
 }
