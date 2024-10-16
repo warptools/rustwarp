@@ -124,7 +124,7 @@ mod tests {
 	use crossbeam_channel::Receiver;
 
 	use super::*;
-	use crate::{Message, Serializable};
+	use crate::{BarId, Message, Serializable};
 
 	struct Builder {
 		data: Vec<u8>,
@@ -172,8 +172,8 @@ mod tests {
 	fn multiple_messages() {
 		let messages = [
 			Serializable::Log("first".to_string()),
-			Serializable::SetUpperMax(5),
-			Serializable::SetUpperPosition(2),
+			Serializable::SetBarMax(BarId(7), 5),
+			Serializable::SetBarPosition(BarId(7), 2),
 			Serializable::Log("last".to_string()),
 		];
 

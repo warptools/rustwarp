@@ -33,6 +33,7 @@ use std::time::Duration;
 
 use crossbeam_channel::Sender;
 use errors::GlobalLoggerAlreadyDefined;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 use server::Server;
 
@@ -47,37 +48,6 @@ static LOGGER: OnceLock<Logger> = OnceLock::new();
 #[derive(Clone)]
 pub struct Logger {
 	channel: Sender<Message>,
-}
-
-#[derive(Debug)]
-pub enum Message {
-	Serializable(Serializable),
-
-	/// Closes the local renderer, if it exists which sends a notification over the given
-	/// oneshot channel once all messages are rendered to the terminal.
-	/// If no local renderer is attached, the oneshot channel is droped.
-	CloseLocalRenderer(mpsc::Sender<()>),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Serializable {
-	Log(String),
-	SetUpper(String),
-	SetLower(String),
-	SetUpperPosition(u64),
-	SetLowerPosition(u64),
-	SetUpperMax(u64),
-	SetLowerMax(u64),
-}
-
-impl PartialEq for Message {
-	fn eq(&self, other: &Self) -> bool {
-		match (self, other) {
-			(Self::Serializable(left), Self::Serializable(right)) => left == right,
-			(Self::CloseLocalRenderer(_), Self::CloseLocalRenderer(_)) => true,
-			_ => false,
-		}
-	}
 }
 
 impl Logger {
@@ -102,85 +72,136 @@ impl Logger {
 	}
 
 	pub fn log(&self, message: impl Into<String>) -> Result<()> {
-		self.send_serializable(Serializable::Log(message.into()))
+		send_serializable(&self.channel, Serializable::Log(message.into()))
 	}
 
-	pub fn set_upper(&self, name: impl Into<String>) -> Result<()> {
-		self.send_serializable(Serializable::SetUpper(name.into()))
-	}
-
-	pub fn set_lower(&self, name: impl Into<String>) -> Result<()> {
-		self.send_serializable(Serializable::SetLower(name.into()))
-	}
-
-	pub fn set_upper_position(&self, position: u64) -> Result<()> {
-		self.send_serializable(Serializable::SetUpperPosition(position))
-	}
-
-	pub fn set_lower_position(&self, position: u64) -> Result<()> {
-		self.send_serializable(Serializable::SetLowerPosition(position))
-	}
-
-	pub fn set_upper_max(&self, max: u64) -> Result<()> {
-		self.send_serializable(Serializable::SetUpperMax(max))
-	}
-
-	pub fn set_lower_max(&self, max: u64) -> Result<()> {
-		self.send_serializable(Serializable::SetLowerMax(max))
+	pub fn create_bar(&self, max: u64, text: impl Into<String>) -> Bar {
+		Bar::with_logger(max, text, self)
 	}
 
 	pub fn close(&self) -> Result<()> {
 		let (sender, receiver) = mpsc::channel();
-		self.send(Message::CloseLocalRenderer(sender))?;
+		send(&self.channel, Message::CloseLocalRenderer(sender))?;
 		// Wait for notification from receiver but
 		// wait no longer than the defined max time.
 		let _ = receiver.recv_timeout(Duration::from_millis(100));
 		Ok(())
 	}
+}
 
-	fn send_serializable(&self, message: Serializable) -> Result<()> {
-		self.send(Message::Serializable(message))
-	}
+#[derive(Default, Clone)]
+pub struct Bar {
+	id: BarId,
+	channel: Option<Sender<Message>>,
+}
 
-	fn send(&self, message: Message) -> Result<()> {
-		self.channel
-			.send(message)
-			.map_err(|e| Error::ChannelInternal { input: e.0 })
+impl Drop for Bar {
+	fn drop(&mut self) {
+		self.send(Serializable::RemoveBar(self.id));
 	}
 }
 
-pub fn set_upper(name: impl Into<String>) {
-	if let Some(logger) = Logger::get_global() {
-		logger.set_upper(name).unwrap();
+impl Bar {
+	/// Create new progress bar using the global logger.
+	///
+	/// If no global logger exists, a "ghost" progress bar is created.
+	/// This progress bar can be used without causing panics, but will not
+	/// display anything on screen.
+	pub fn new(max: u64, text: impl Into<String>) -> Self {
+		if let Some(logger) = Logger::get_global() {
+			Bar::with_logger(max, text, logger)
+		} else {
+			Default::default()
+		}
+	}
+
+	/// Create new progress bar using the given logger.
+	pub fn with_logger(max: u64, text: impl Into<String>, logger: &Logger) -> Self {
+		let bar = Self {
+			id: BarId::new(),
+			channel: Some(logger.channel.clone()),
+		};
+		bar.send(Serializable::CreateBar { id: bar.id, max });
+		bar.set_text(text);
+		bar
+	}
+
+	pub fn set(&self, position: u64, text: impl Into<String>) {
+		self.set_position(position);
+		self.set_text(text);
+	}
+
+	pub fn set_text(&self, text: impl Into<String>) {
+		self.send(Serializable::SetBarText(self.id, text.into()));
+	}
+
+	pub fn set_position(&self, position: u64) {
+		self.send(Serializable::SetBarPosition(self.id, position));
+	}
+
+	pub fn set_max(&self, max: u64) {
+		self.send(Serializable::SetBarMax(self.id, max));
+	}
+
+	#[inline]
+	fn send(&self, message: Serializable) {
+		let Some(channel) = &self.channel else {
+			return;
+		};
+
+		let result = send_serializable(channel, message);
+		match result {
+			Ok(_) => {}
+			Err(Error::ChannelInternal { .. }) => {}
+		}
 	}
 }
 
-pub fn set_lower(name: impl Into<String>) {
-	if let Some(logger) = Logger::get_global() {
-		logger.set_lower(name).unwrap();
+#[derive(Debug)]
+pub enum Message {
+	Serializable(Serializable),
+
+	/// Closes the local renderer, if it exists which sends a notification over the given
+	/// oneshot channel once all messages are rendered to the terminal.
+	/// If no local renderer is attached, the oneshot channel is droped.
+	CloseLocalRenderer(mpsc::Sender<()>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Serializable {
+	Log(String),
+	CreateBar { id: BarId, max: u64 },
+	RemoveBar(BarId),
+	SetBarText(BarId, String),
+	SetBarPosition(BarId, u64),
+	SetBarMax(BarId, u64),
+}
+
+#[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct BarId(u64);
+
+impl BarId {
+	pub fn new() -> Self {
+		Self(rand::thread_rng().gen())
 	}
 }
 
-pub fn set_upper_position(position: u64) {
-	if let Some(logger) = Logger::get_global() {
-		logger.set_upper_position(position).unwrap();
+impl PartialEq for Message {
+	fn eq(&self, other: &Self) -> bool {
+		match (self, other) {
+			(Self::Serializable(left), Self::Serializable(right)) => left == right,
+			(Self::CloseLocalRenderer(_), Self::CloseLocalRenderer(_)) => true,
+			_ => false,
+		}
 	}
 }
 
-pub fn set_lower_position(position: u64) {
-	if let Some(logger) = Logger::get_global() {
-		logger.set_lower_position(position).unwrap();
-	}
+fn send_serializable(channel: &Sender<Message>, message: Serializable) -> Result<()> {
+	send(channel, Message::Serializable(message))
 }
 
-pub fn set_upper_max(max: u64) {
-	if let Some(logger) = Logger::get_global() {
-		logger.set_upper_max(max).unwrap();
-	}
-}
-
-pub fn set_lower_max(max: u64) {
-	if let Some(logger) = Logger::get_global() {
-		logger.set_lower_max(max).unwrap();
-	}
+fn send(channel: &Sender<Message>, message: Message) -> Result<()> {
+	channel
+		.send(message)
+		.map_err(|e| Error::ChannelInternal { input: e.0 })
 }

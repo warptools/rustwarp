@@ -11,7 +11,7 @@ use warpforge_api::formula::{
 	SandboxPort,
 };
 use warpforge_api::plot::LocalLabel;
-use warpforge_terminal::{logln, set_lower, set_lower_max, set_lower_position};
+use warpforge_terminal::{logln, Bar};
 
 use crate::context::Context;
 use crate::events::EventBody;
@@ -155,9 +155,7 @@ impl<'a> Formula<'a> {
 	) -> Result<Vec<Output>> {
 		let formula::FormulaCapsule::V1(formula) = formula_and_context.formula;
 
-		set_lower("formula");
-		set_lower_max(5);
-		set_lower_position(0);
+		let progress = Bar::new(5, "setup container");
 
 		let (mut mounts, environment) = self.setup_inputs(formula.inputs)?;
 
@@ -177,7 +175,7 @@ impl<'a> Formula<'a> {
 		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 		let ident = format!("warpforge-{random_suffix}");
 
-		set_lower_position(1);
+		progress.set(1, "fetch container");
 
 		let bundle_path = self.executor.ersatz_dir.join(&ident);
 		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
@@ -195,7 +193,7 @@ impl<'a> Formula<'a> {
 			}
 		})?;
 
-		set_lower_position(3);
+		progress.set(3, "run container");
 
 		let params = ContainerParams {
 			ident,
@@ -207,7 +205,7 @@ impl<'a> Formula<'a> {
 		};
 		self.executor.run(&params, outbox)?;
 
-		set_lower_position(5);
+		progress.set(5, "pack outputs");
 
 		pack_outputs(&self.context.output_path, &outputs)
 	}
