@@ -6,6 +6,7 @@ use std::{
 
 use oci_unpack::tee::WriteExt;
 use sha2::{Digest, Sha384};
+use warpforge_api::content::Packtype;
 
 use crate::{Error, Output, Result};
 
@@ -18,6 +19,20 @@ pub(crate) struct IntermediateOutput {
 pub(crate) enum OutputPacktype {
 	None,
 	Tar,
+}
+
+impl OutputPacktype {
+	pub(crate) fn parse(packtype: &Option<Packtype>) -> Result<Self> {
+		Ok(match packtype {
+			None => OutputPacktype::None,
+			Some(Packtype(p)) if p == "none" => OutputPacktype::None,
+			Some(Packtype(p)) if p == "tar" => OutputPacktype::Tar,
+			_ => {
+				let msg = "unsupported packtype (allowed values: 'none', 'tar')".into();
+				return Err(Error::SystemSetupCauseless { msg });
+			}
+		})
+	}
 }
 
 pub(crate) fn pack_outputs(

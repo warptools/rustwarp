@@ -5,7 +5,6 @@ use rand::distributions::{Alphanumeric, DistString};
 use std::io::Write;
 use std::path::PathBuf;
 use std::{fs, thread};
-use warpforge_api::content::Packtype;
 use warpforge_api::formula::{
 	self, Action, ActionScript, FormulaAndContext, FormulaInput, GatherDirective, Mount,
 	SandboxPort,
@@ -301,18 +300,6 @@ impl<'a> Formula<'a> {
 				return Err(Error::SystemSetupCauseless { msg });
 			}
 
-			let packtype = match packtype {
-				None => OutputPacktype::None,
-				Some(Packtype(p)) if p == "none" => OutputPacktype::None,
-				Some(Packtype(p)) if p == "tar" => OutputPacktype::Tar,
-				_ => {
-					let msg = format!(
-						"formula output '{name}': unsupported packtype (allowed values: 'none', 'tar')"
-					);
-					return Err(Error::SystemSetupCauseless { msg });
-				}
-			};
-
 			let output_dir = outputs_dir.join(&name);
 			fs::create_dir_all(&output_dir).map_err(|err| Error::SystemSetupError {
 				msg: format!("formula output '{name}': failed to create output directory"),
@@ -324,7 +311,7 @@ impl<'a> Formula<'a> {
 			outputs.push(IntermediateOutput {
 				name,
 				host_path: output_dir,
-				packtype,
+				packtype: OutputPacktype::parse(&packtype)?,
 			});
 		}
 

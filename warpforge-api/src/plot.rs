@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use derive_more::{Display, FromStr};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -23,8 +25,20 @@ pub struct Plot {
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
 pub struct LocalLabel(pub String);
 
+impl Borrow<String> for LocalLabel {
+	fn borrow(&self) -> &String {
+		&self.0
+	}
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
 pub struct StepName(pub String);
+
+impl Borrow<String> for StepName {
+	fn borrow(&self) -> &String {
+		&self.0
+	}
+}
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub enum PlotInput {

@@ -1,3 +1,5 @@
+use std::borrow::Borrow;
+
 use derive_more::{Display, FromStr};
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -8,6 +10,12 @@ use crate::content::WareID;
 // FUTURE: Could be represneted as an enum, discriminating on the first char being '/' or '$'
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
 pub struct SandboxPort(pub String);
+
+impl Borrow<String> for SandboxPort {
+	fn borrow(&self) -> &String {
+		&self.0
+	}
+}
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
 pub enum Mount {
@@ -107,6 +115,12 @@ pub enum FormulaContextCapsule {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, FromStr, Display)]
 pub struct WarehouseAddr(pub String);
+
+impl Borrow<String> for WarehouseAddr {
+	fn borrow(&self) -> &String {
+		&self.0
+	}
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct FormulaContext {

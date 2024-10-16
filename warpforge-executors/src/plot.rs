@@ -1,6 +1,5 @@
 use indexmap::{IndexMap, IndexSet};
 use tempfile::TempDir;
-use warpforge_api::content::Packtype;
 use warpforge_api::formula::{
 	Formula, FormulaAndContext, FormulaCapsule, FormulaContext, FormulaContextCapsule,
 	FormulaInput, GatherDirective, Mount,
@@ -77,19 +76,30 @@ impl<'a> PlotExecutor<'a> {
 			}
 		}
 
-		let outputs = (self.plot.outputs.iter())
-			.map(|(LocalLabel(name), PlotOutput::Pipe(pipe))| {
-				let host_path = (self.temp_dir.path())
-					.join(&pipe.step_name)
-					.join(OUTPUTS_DIR)
-					.join(&pipe.label.0);
-				IntermediateOutput {
-					name: name.to_owned(),
-					host_path,
-					packtype: OutputPacktype::Tar,
-				}
-			})
-			.collect::<Vec<_>>();
+		let mut outputs = Vec::new();
+		for (LocalLabel(name), PlotOutput::Pipe(pipe)) in &self.plot.outputs {
+			let Some(Step::Protoformula(step)) = self.plot.steps.get(&pipe.step_name) else {
+				let msg = format!("output '{name}': step '{}' not found", pipe.step_name);
+				return Err(Error::SystemSetupCauseless { msg });
+			};
+			let Some(step_output) = step.outputs.get(&pipe.label) else {
+				let msg = format!(
+					"output '{name}': step '{}' has no output named '{}'",
+					pipe.step_name, pipe.label,
+				);
+				return Err(Error::SystemSetupCauseless { msg });
+			};
+
+			let host_path = (self.temp_dir.path())
+				.join(&pipe.step_name)
+				.join(OUTPUTS_DIR)
+				.join(&pipe.label.0);
+			outputs.push(IntermediateOutput {
+				name: name.to_owned(),
+				host_path,
+				packtype: OutputPacktype::parse(&step_output.packtype)?,
+			});
+		}
 
 		pack_outputs(&self.context.output_path, &outputs)
 	}
@@ -98,17 +108,19 @@ impl<'a> PlotExecutor<'a> {
 		let Step::Protoformula(step) = self.graph.nodes[step_name] else {
 			todo!(); // TODO: Implement sub-plots.
 		};
+
 		let step_dir = self.temp_dir.path().join(step_name);
-		let output_path = Some(step_dir.join(OUTPUTS_DIR));
 		let context = Context {
-			output_path,
+			output_path: Some(step_dir.join(OUTPUTS_DIR)),
 			..self.context.clone()
 		};
+
 		let image = self.plot.image.as_ref().or(step.image.as_ref());
 		let Some(image) = image else {
 			let msg = format!("invalid plot (step '{step_name}'): image required");
 			return Err(Error::SystemSetupCauseless { msg });
 		};
+
 		let inputs = (step.inputs.iter())
 			.map(|(port, input)| {
 				let input = match input {
@@ -131,21 +143,22 @@ impl<'a> PlotExecutor<'a> {
 				(port.to_owned(), input)
 			})
 			.collect::<IndexMap<_, _>>();
-		for (_, GatherDirective { packtype, .. }) in &step.outputs {
-			if (packtype.as_ref())
-				.map(|Packtype(p)| p != "none")
-				.unwrap_or(false)
-			{
-				let msg =
-					format!("invalid plot (step '{step_name}'): output packtype has to be 'none'");
-				return Err(Error::SystemSetupCauseless { msg });
-			}
-		}
+
+		let outputs = (step.outputs.iter())
+			.map(|(label, output)| {
+				let output = GatherDirective {
+					from: output.from.to_owned(),
+					packtype: None,
+				};
+				(label.to_owned(), output)
+			})
+			.collect::<IndexMap<_, _>>();
+
 		let formula = Formula {
 			image: image.clone(),
 			inputs,
 			action: step.action.clone(),
-			outputs: step.outputs.clone(),
+			outputs,
 		};
 		let formula = FormulaAndContext {
 			formula: FormulaCapsule::V1(formula),
