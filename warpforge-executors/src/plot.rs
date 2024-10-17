@@ -121,28 +121,47 @@ impl<'a> PlotExecutor<'a> {
 			return Err(Error::SystemSetupCauseless { msg });
 		};
 
-		let inputs = (step.inputs.iter())
-			.map(|(port, input)| {
-				let input = match input {
-					PlotInput::Mount(mount) => FormulaInput::Mount(mount.to_owned()),
-					PlotInput::Literal(literal) => FormulaInput::Literal(literal.to_owned()),
-					PlotInput::Ware(ware_id) => FormulaInput::Ware(ware_id.to_owned()),
-					PlotInput::Pipe(pipe) => {
-						if pipe.step_name.is_empty() {
-							todo!();
+		let mut inputs = IndexMap::new();
+		for (port, input) in &step.inputs {
+			let input = match input {
+				PlotInput::Mount(mount) => FormulaInput::Mount(mount.to_owned()),
+				PlotInput::Literal(literal) => FormulaInput::Literal(literal.to_owned()),
+				PlotInput::Ware(ware_id) => FormulaInput::Ware(ware_id.to_owned()),
+				PlotInput::Pipe(pipe) => {
+					if pipe.step_name.is_empty() {
+						let Some(plot_input) = self.plot.inputs.get(&pipe.label) else {
+							let msg = format!(
+								"invalid plot (step '{step_name}'): input '{}' not found",
+								pipe.label
+							);
+							return Err(Error::SystemSetupCauseless { msg });
+						};
+						match plot_input {
+							PlotInput::Mount(mount) => FormulaInput::Mount(mount.to_owned()),
+							PlotInput::Ware(ware_id) => FormulaInput::Ware(ware_id.to_owned()),
+							PlotInput::Literal(literal) => {
+								FormulaInput::Literal(literal.to_owned())
+							}
+							PlotInput::Pipe(_) => {
+								let msg = "invalid plot: plot inputs may not contain pipes".into();
+								return Err(Error::SystemSetupCauseless { msg });
+							}
+							_ => todo!(),
 						}
+					} else {
 						let path = (self.temp_dir.path())
 							.join(&pipe.step_name)
 							.join(OUTPUTS_DIR)
 							.join(&pipe.label.0);
 						FormulaInput::Mount(Mount::ReadOnly(to_string_or_panic(path)))
 					}
-					PlotInput::CatalogRef(_catalog_ref) => todo!(),
-					PlotInput::Ingest(_ingest) => todo!(),
-				};
-				(port.to_owned(), input)
-			})
-			.collect::<IndexMap<_, _>>();
+				}
+				PlotInput::CatalogRef(_catalog_ref) => todo!(),
+				PlotInput::Ingest(_ingest) => todo!(),
+			};
+
+			inputs.insert(port.to_owned(), input);
+		}
 
 		let outputs = (step.outputs.iter())
 			.map(|(label, output)| {
