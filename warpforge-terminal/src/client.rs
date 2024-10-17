@@ -124,7 +124,7 @@ mod tests {
 	use crossbeam_channel::Receiver;
 
 	use super::*;
-	use crate::{BarId, Message, Serializable};
+	use crate::{BarId, Level, Message, Serializable};
 
 	struct Builder {
 		data: Vec<u8>,
@@ -160,7 +160,7 @@ mod tests {
 
 	#[test]
 	fn simple_message() {
-		let message = Serializable::Log("hi".to_string());
+		let message = Serializable::Log(Level::Info, "hi".to_string());
 		let reader = Builder::new().read_message(&message).build();
 		let (sender, receiver) = crossbeam_channel::bounded(1);
 		start_client(sender, reader);
@@ -171,10 +171,10 @@ mod tests {
 	#[test]
 	fn multiple_messages() {
 		let messages = [
-			Serializable::Log("first".to_string()),
+			Serializable::Log(Level::Info, "first".to_string()),
 			Serializable::SetBarMax(BarId(7), 5),
 			Serializable::SetBarPosition(BarId(7), 2),
-			Serializable::Log("last".to_string()),
+			Serializable::Log(Level::Info, "last".to_string()),
 		];
 
 		let mut builder = Builder::new();
@@ -193,7 +193,7 @@ mod tests {
 
 	#[test]
 	fn exceed_memory_limit() {
-		let message = Serializable::Log("x".repeat(BUFFER_MAX_SIZE));
+		let message = Serializable::Log(Level::Info, "x".repeat(BUFFER_MAX_SIZE));
 		let reader = Builder::new().read_message(&message).build();
 		let (sender, receiver) = crossbeam_channel::bounded(1);
 		start_client(sender, reader);
@@ -203,7 +203,7 @@ mod tests {
 
 	#[test]
 	fn server_closed_connection() {
-		let message = Serializable::Log("hi".to_string());
+		let message = Serializable::Log(Level::Info, "hi".to_string());
 		let reader = Builder::new().read_message(&message).build();
 		let (sender, receiver) = crossbeam_channel::bounded(1);
 		start_client(sender, reader);

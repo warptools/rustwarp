@@ -15,15 +15,15 @@ fn main() -> Result<()> {
 	let lower = Bar::new(TASKS, "");
 	for (m, &module) in modules.iter().enumerate() {
 		upper.set_text(module);
-		logger.log(format!("Start work on module '{module}'...\n"))?;
+		logger.info(format!("Start work on module '{module}'...\n"))?;
 
 		for task in 0..TASKS {
 			lower.set(task, format!("task{}", task));
 			sleep(Duration::from_millis(100));
-			logger.log(format!("Finished task 'task{task}'\n"))?;
+			logger.info(format!("Finished task 'task{task}'\n"))?;
 		}
 
-		logger.log(format!("Finished module '{module}'\n"))?;
+		logger.info(format!("Finished module '{module}'\n"))?;
 		lower.set_position(TASKS);
 		upper.set_position(m as u64 + 1);
 	}

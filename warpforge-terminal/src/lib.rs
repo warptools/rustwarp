@@ -71,8 +71,36 @@ impl Logger {
 		LOGGER.get()
 	}
 
-	pub fn log(&self, message: impl Into<String>) -> Result<()> {
-		send_serializable(&self.channel, Serializable::Log(message.into()))
+	pub fn log(&self, level: Level, message: impl Into<String>) -> Result<()> {
+		send_serializable(&self.channel, Serializable::Log(level, message.into()))
+	}
+
+	pub fn trace(&self, message: impl Into<String>) -> Result<()> {
+		if cfg!(debug_assertions) {
+			self.log(Level::Trace, message)
+		} else {
+			Ok(())
+		}
+	}
+
+	pub fn debug(&self, message: impl Into<String>) -> Result<()> {
+		if cfg!(debug_assertions) {
+			self.log(Level::Debug, message)
+		} else {
+			Ok(())
+		}
+	}
+
+	pub fn info(&self, message: impl Into<String>) -> Result<()> {
+		self.log(Level::Info, message)
+	}
+
+	pub fn warn(&self, message: impl Into<String>) -> Result<()> {
+		self.log(Level::Warn, message)
+	}
+
+	pub fn error(&self, message: impl Into<String>) -> Result<()> {
+		self.log(Level::Error, message)
 	}
 
 	pub fn create_bar(&self, max: u64, text: impl Into<String>) -> Bar {
@@ -169,12 +197,21 @@ pub enum Message {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Serializable {
-	Log(String),
+	Log(Level, String),
 	CreateBar { id: BarId, max: u64 },
 	RemoveBar(BarId),
 	SetBarText(BarId, String),
 	SetBarPosition(BarId, u64),
 	SetBarMax(BarId, u64),
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum Level {
+	Trace,
+	Debug,
+	Info,
+	Warn,
+	Error,
 }
 
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

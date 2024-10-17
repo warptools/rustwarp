@@ -75,7 +75,7 @@ impl TerminalRenderer {
 					break;
 				}
 				Message::Serializable(message) => {
-					if let Serializable::Log(message) = &message {
+					if let Serializable::Log(_, message) = &message {
 						match &self.multi_progress {
 							Some(multi_progress) => multi_progress.suspend(|| print!("{message}")),
 							None => print!("{message}"),
@@ -83,7 +83,7 @@ impl TerminalRenderer {
 					} else {
 						self.add_multiprogress();
 						match message {
-							Serializable::Log(_) => unreachable!(),
+							Serializable::Log(..) => unreachable!(),
 							Serializable::CreateBar { id, max } => {
 								let multi = self.multi_progress.as_ref().unwrap();
 								let style = ProgressStyle::with_template(
