@@ -10,12 +10,18 @@ pub fn log_global(level: Level, message: impl Into<String>) {
 		match logger.log(level, message.into()) {
 			Ok(_) => {}
 			Err(Error::ChannelInternal {
-				input: Message::Serializable(Serializable::Log(_, message)),
-			}) => print!("{}", message),
+				input: Message::Serializable(serializable),
+			}) => match serializable {
+				Serializable::Log(Level::Output, message) => print!("{message}"),
+				Serializable::Log(_, message) => eprint!("{message}"),
+				_ => {}
+			},
 			Err(e) => panic!("log!() or logln!() failed unexpectedly: {e}"),
 		}
-	} else {
+	} else if level == Level::Output {
 		print!("{}", message.into());
+	} else {
+		eprint!("{}", message.into());
 	}
 }
 
@@ -44,7 +50,7 @@ pub fn log_global(level: Level, message: impl Into<String>) {
 /// ```
 #[macro_export]
 macro_rules! log {
-	($($arg:tt)+) => { $crate::log_global($crate::Level::Info, format!($($arg)+)) };
+	($($arg:tt)+) => { $crate::log_global($crate::Level::Output, format!($($arg)+)) };
 }
 
 /// Sends a message to the global logger, with a newline.
@@ -79,13 +85,13 @@ macro_rules! log {
 /// ```
 #[macro_export]
 macro_rules! logln {
-	() => { $crate::log_global($crate::Level::Info, "\n") };
+	() => { $crate::log_global($crate::Level::Output, "\n") };
 	// Using two format_args! calls here, to avoid allocation of two String instances.
 	// https://github.com/rust-lang/rust/pull/97658#issuecomment-1530505696
 	// https://github.com/rust-lang/rust/pull/111060
 	($($arg:tt)+) => {{
 		let message = std::fmt::format(format_args!("{}\n", format_args!($($arg)+)));
-		$crate::log_global($crate::Level::Info, message);
+		$crate::log_global($crate::Level::Output, message);
 	}};
 }
 
@@ -153,7 +159,7 @@ macro_rules! debug {
 
 /// Sends a info message to the global logger.
 ///
-/// Equivalent to the [`logln!`] macro.
+/// Equivalent to the [`logln!`] macro except that the log level is info.
 ///
 /// # Panics
 ///

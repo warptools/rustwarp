@@ -212,6 +212,7 @@ pub enum Level {
 	Info,
 	Warn,
 	Error,
+	Output,
 }
 
 #[derive(Default, Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]

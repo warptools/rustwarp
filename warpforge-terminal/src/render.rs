@@ -3,7 +3,7 @@ use std::{collections::HashMap, env::args, thread, time::Duration};
 use crossbeam_channel::Receiver;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
-use crate::{BarId, Message, Serializable};
+use crate::{BarId, Level, Message, Serializable};
 
 pub(crate) struct TerminalRenderer {
 	multi_progress: Option<MultiProgress>,
@@ -75,10 +75,14 @@ impl TerminalRenderer {
 					break;
 				}
 				Message::Serializable(message) => {
-					if let Serializable::Log(_, message) = &message {
+					if let Serializable::Log(level, message) = &message {
+						let print = || match *level {
+							Level::Output => print!("{message}"),
+							_ => eprint!("{message}"),
+						};
 						match &self.multi_progress {
-							Some(multi_progress) => multi_progress.suspend(|| print!("{message}")),
-							None => print!("{message}"),
+							Some(multi_progress) => multi_progress.suspend(print),
+							None => print(),
 						}
 					} else {
 						self.add_multiprogress();
