@@ -69,7 +69,7 @@ impl<'a> PlotExecutor<'a> {
 			};
 			for &child in children {
 				let child_parents = &mut parents[child];
-				let removed = child_parents.remove(step_name);
+				let removed = child_parents.swap_remove(step_name);
 				if removed && child_parents.is_empty() {
 					next_steps.push(child);
 				}
@@ -303,9 +303,9 @@ impl<'a> PlotGraph<'a> {
 			};
 			for &child in children {
 				let child_parents = &mut parents[child];
-				let removed = child_parents.remove(node);
+				let removed = child_parents.swap_remove(node);
 				if removed && child_parents.is_empty() {
-					parents.remove(child);
+					parents.swap_remove(child);
 					no_parents.push(child);
 				}
 			}
