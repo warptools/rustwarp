@@ -30,7 +30,8 @@ use oci_client::{
 	client::{ClientConfig, ImageLayer},
 	manifest::{
 		OciImageManifest, IMAGE_DOCKER_LAYER_GZIP_MEDIA_TYPE, IMAGE_DOCKER_LAYER_TAR_MEDIA_TYPE,
-		IMAGE_LAYER_GZIP_MEDIA_TYPE, IMAGE_LAYER_MEDIA_TYPE,
+		IMAGE_LAYER_GZIP_MEDIA_TYPE, IMAGE_LAYER_MEDIA_TYPE, IMAGE_MANIFEST_LIST_MEDIA_TYPE,
+		IMAGE_MANIFEST_MEDIA_TYPE, OCI_IMAGE_INDEX_MEDIA_TYPE, OCI_IMAGE_MEDIA_TYPE,
 	},
 	Client, Reference,
 };
@@ -40,6 +41,13 @@ use sha2::{Digest, Sha256};
 pub use crate::config::PullConfig;
 pub use crate::error::{Error, Result};
 use crate::tee::ReadExt;
+
+const MANIFEST_MEDIA_TYPES: &[&str] = &[
+	IMAGE_MANIFEST_MEDIA_TYPE,
+	IMAGE_MANIFEST_LIST_MEDIA_TYPE,
+	OCI_IMAGE_MEDIA_TYPE,
+	OCI_IMAGE_INDEX_MEDIA_TYPE,
+];
 
 // TODO: Consider adding ZSTD support in addition to TAR and GZIP.
 const LAYER_MEDIA_TYPES: &[&str] = &[
@@ -161,6 +169,20 @@ pub async fn pull_image(
 		.await?;
 
 	Ok(image_data)
+}
+
+#[tokio::main]
+pub async fn pull_image_manifest(image: &Reference, config: &PullConfig) -> Result<String> {
+	let mut cache = Cache::new(config);
+	if let Some(image_data) = cache.before_pull(image)? {
+		return Ok(image_data.digest.unwrap());
+	}
+
+	let client = Client::new(ClientConfig::default());
+	let manifest = client
+		.pull_manifest_raw(image, &config.auth, MANIFEST_MEDIA_TYPES)
+		.await?;
+	Ok(manifest.1)
 }
 
 fn unpack_layer(layer: &ImageLayer, diff_id: &str, target: impl AsRef<Path>) -> Result<()> {

@@ -7,11 +7,9 @@ use crate::plot::PlotGraph;
 fn cyclic_graph() {
 	let PlotCapsule::V1(plot) = serde_json::from_value(json!({
 		"plot.v1": {
-			"image": {
-				"reference": "docker.io/busybox:latest",
-				"readonly": true
+			"inputs": {
+				"/": "oci:docker.io/library/busybox:latest",
 			},
-			"inputs": {},
 			"steps": {
 				"create": {
 					"protoformula": {
@@ -80,15 +78,13 @@ fn cyclic_graph() {
 fn invalid_edges() {
 	let PlotCapsule::V1(plot) = serde_json::from_value(json!({
 		"plot.v1": {
-			"image": {
-				"reference": "docker.io/busybox:latest",
-				"readonly": true
-			},
 			"inputs": {},
 			"steps": {
 				"create": {
 					"protoformula": {
-						"inputs": {},
+						"inputs": {
+							"/": "oci:docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564",
+						},
 						"action": {
 							"script": {
 								"interpreter": "/bin/sh",
@@ -105,6 +101,7 @@ fn invalid_edges() {
 				"copy": {
 					"protoformula": {
 						"inputs": {
+							"/": "oci:docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564",
 							"/in": "pipe:create:out",
 							"/in": "pipe:invalid:out"
 						},
@@ -124,6 +121,7 @@ fn invalid_edges() {
 				"output": {
 					"protoformula": {
 						"inputs": {
+							"/": "oci:docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564",
 							"/in": "pipe:copy:copied",
 							"/in": "pipe:invalid:out"
 						},

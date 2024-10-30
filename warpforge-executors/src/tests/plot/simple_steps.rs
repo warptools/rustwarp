@@ -8,15 +8,15 @@ use crate::{context::Context, plot::run_plot, tests::default_context, Output};
 fn plot_simple_steps() {
 	let plot: PlotCapsule = serde_json::from_value(json!({
 		"plot.v1": {
-			"image": {
-				"reference": "docker.io/busybox:latest",
-				"readonly": true
+			"inputs": {
+				"image": "oci:docker.io/busybox:latest"
 			},
-			"inputs": {},
 			"steps": {
 				"create": {
 					"protoformula": {
-						"inputs": {},
+						"inputs": {
+							"/": "pipe::image"
+						},
 						"action": {
 							"script": {
 								"interpreter": "/bin/sh",
@@ -33,6 +33,7 @@ fn plot_simple_steps() {
 				"copy": {
 					"protoformula": {
 						"inputs": {
+							"/": "pipe::image",
 							"/in": "pipe:create:out"
 						},
 						"action": {
@@ -51,6 +52,7 @@ fn plot_simple_steps() {
 				"output": {
 					"protoformula": {
 						"inputs": {
+							"/": "pipe::image",
 							"/in": "pipe:copy:copied"
 						},
 						"action": {
@@ -92,15 +94,14 @@ fn plot_simple_steps() {
 fn plot_simple_steps_magled_order() {
 	let plot: PlotCapsule = serde_json::from_value(json!({
 		"plot.v1": {
-			"image": {
-				"reference": "docker.io/busybox:latest",
-				"readonly": true
+			"inputs": {
+				"image": "oci:docker.io/busybox:latest"
 			},
-			"inputs": {},
 			"steps": {
 				"output": {
 					"protoformula": {
 						"inputs": {
+							"/": "pipe::image",
 							"/in": "pipe:copy:copied"
 						},
 						"action": {
@@ -116,6 +117,7 @@ fn plot_simple_steps_magled_order() {
 				"copy": {
 					"protoformula": {
 						"inputs": {
+							"/": "oci:docker.io/busybox:latest",
 							"/in": "pipe:create:out"
 						},
 						"action": {
@@ -133,7 +135,9 @@ fn plot_simple_steps_magled_order() {
 				},
 				"create": {
 					"protoformula": {
-						"inputs": {},
+						"inputs": {
+							"/": "pipe::image"
+						},
 						"action": {
 							"script": {
 								"interpreter": "/bin/sh",

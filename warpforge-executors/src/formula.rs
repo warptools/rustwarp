@@ -1,5 +1,6 @@
 use crossbeam_channel::Sender;
 use indexmap::IndexMap;
+use oci_client::Reference;
 use oci_unpack::{pull_and_unpack, PullConfig};
 use rand::distributions::{Alphanumeric, DistString};
 use std::io::Write;
@@ -156,6 +157,23 @@ impl<'a> Formula<'a> {
 
 		let progress = Bar::new(5, "setup container");
 
+		let Some(input) = formula.inputs.get(&"/".to_string()) else {
+			let msg = "formulas require inputs to specify value for '/'".into();
+			return Err(Error::SystemSetupCauseless { msg });
+		};
+		let FormulaInput::OCIReference(reference) = input else {
+			let msg = "formula input '/' currently has to be of type 'oci'".into();
+			return Err(Error::SystemSetupCauseless { msg });
+		};
+		let reference: Reference = (reference.parse()).map_err(|err| Error::SystemSetupError {
+			msg: "failed to parse image reference".into(),
+			cause: Box::new(err),
+		})?;
+		let Some(reference_digest) = reference.digest() else {
+			let msg = "formula inputs of type 'oci' are required to contain digest".into();
+			return Err(Error::SystemSetupCauseless { msg });
+		};
+
 		let (mut mounts, environment) = self.setup_inputs(formula.inputs)?;
 
 		let outputs = self.setup_outputs(formula.outputs, &mut mounts)?;
@@ -171,26 +189,26 @@ impl<'a> Formula<'a> {
 			Action::Script(a) => self.setup_script(a, &mut mounts)?,
 		};
 
+		progress.set(1, "fetch container");
+
 		let random_suffix = Alphanumeric.sample_string(&mut rand::thread_rng(), 16);
 		let ident = format!("warpforge-{random_suffix}");
 
-		progress.set(1, "fetch container");
-
 		let bundle_path = self.executor.ersatz_dir.join(&ident);
-		let reference = (formula.image.reference.parse()).map_err(|err| Error::Catchall {
-			msg: "failed to parse image reference".into(),
-			cause: Box::new(err),
-		})?;
 		let pull_config = PullConfig {
 			cache: self.context.image_cache.clone(),
 			..PullConfig::default()
 		};
-		pull_and_unpack(&reference, &bundle_path, &pull_config).map_err(|err| {
+		let bundle = pull_and_unpack(&reference, &bundle_path, &pull_config).map_err(|err| {
 			Error::SystemSetupError {
 				msg: "failed to obtain image".into(),
 				cause: Box::new(err),
 			}
 		})?;
+		if bundle.manifest_digest != reference_digest {
+			let msg = "digest of 'oci' input and actual image do not match".into();
+			return Err(Error::SystemSetupCauseless { msg });
+		}
 
 		progress.set(3, "run container");
 
@@ -256,6 +274,13 @@ impl<'a> Formula<'a> {
 							let mount_spec =
 								MountSpec::new_overlayfs(self.context, host_path, &port, run_dir)?;
 							mounts.insert(port, mount_spec);
+						}
+						FormulaInput::OCIReference(_) => {
+							if port != "/" {
+								return Err(Error::SystemSetupCauseless { msg: String::from(
+									"inputs of type 'oci' are currently only allowed for port '/'",
+								) });
+							}
 						}
 						FormulaInput::Literal(_) => {
 							let msg = format!("formula input '{}': 'literal' not supported, use 'ware' or 'mount'", port);

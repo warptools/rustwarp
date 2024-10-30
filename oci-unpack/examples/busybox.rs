@@ -9,6 +9,7 @@ fn main() -> Result<()> {
 
 	let info = pull_and_unpack(&reference, target, &config)?;
 	println!("{:#?}", info.manifest);
+	println!("{}", info.manifest_digest);
 
 	Ok(())
 }

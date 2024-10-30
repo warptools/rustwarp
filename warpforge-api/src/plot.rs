@@ -5,7 +5,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
-use crate::formula::{self, Mount};
+use crate::formula::Mount;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum PlotCapsule {
@@ -15,8 +15,6 @@ pub enum PlotCapsule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Plot {
-	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pub image: Option<formula::Image>,
 	pub inputs: IndexMap<LocalLabel, PlotInput>,
 	pub steps: IndexMap<StepName, Step>,
 	pub outputs: IndexMap<LocalLabel, PlotOutput>,
@@ -59,6 +57,16 @@ pub enum PlotInput {
 
 	#[discriminant = "ingest"]
 	Ingest(Ingest),
+
+	/// OCI Reference to an image. This has to include registry and repository and
+	/// it may include tag and manifest digest.
+	///
+	/// `oci` can only be used for port "/" and "/" has to be defined in a protoformula.
+	///
+	/// In plots `oci` can contain the image digest, but we also allow name resolution.
+	/// (For example "docker.io/library/busybox" is allowed.)
+	#[discriminant = "oci"]
+	OCIReference(String),
 }
 
 #[derive(Clone, Debug, SerializeDisplay, DeserializeFromStr, catverters_derive::Stringoid)]
@@ -97,8 +105,6 @@ pub enum Step {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Protoformula {
-	#[serde(default, skip_serializing_if = "Option::is_none")]
-	pub image: Option<formula::Image>,
 	pub inputs: IndexMap<crate::formula::SandboxPort, PlotInput>,
 	pub action: crate::formula::Action,
 	pub outputs: IndexMap<LocalLabel, crate::formula::GatherDirective>,

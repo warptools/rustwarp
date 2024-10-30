@@ -39,6 +39,16 @@ pub enum FormulaInput {
 
 	#[discriminant = "literal"]
 	Literal(String),
+
+	/// OCI Reference to an image. This has to include registry and repository and
+	/// it may include tag and manifest digest.
+	///
+	/// `oci` can only be used for port "/" and "/" has to be defined in a formula.
+	///
+	/// `oci` has to contain the complete digest of the target image.
+	/// (For example "docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564")
+	#[discriminant = "oci"]
+	OCIReference(String),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -47,25 +57,6 @@ pub struct GatherDirective {
 	pub packtype: Option<crate::content::Packtype>,
 	// TODO:
 	// filters: Option<FilterMap>,
-}
-
-/// Specifies which image to use to execute the formula.
-///
-/// Not (yet) part of the official specification!
-///
-/// Added because pulling images from a registry seems to make more sense
-/// than generating rootfs ourselves. An [OCI Registry] provides a hash over
-/// the image manifest (which includes hashes to all contents). And we can
-/// pull images by their manifest digest from the registry for replays.
-///
-/// [OCI Registry]: https://github.com/opencontainers/distribution-spec/blob/main/spec.md
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Image {
-	/// OCI Reference to an image. This has to include registry and repository and
-	/// it may include tag and manifest digest.
-	pub reference: String,
-	/// Determines if the rootfs will be mounted with readonly or readwrite permissions.
-	pub readonly: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -101,7 +92,6 @@ pub enum FormulaCapsule {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Formula {
-	pub image: Image,
 	pub inputs: IndexMap<SandboxPort, FormulaInput>,
 	pub action: Action,
 	pub outputs: IndexMap<crate::plot::LocalLabel, GatherDirective>,
@@ -141,15 +131,11 @@ mod tests {
 	use expect_test::expect;
 
 	#[test]
-	fn test_formulat_roundtrip() {
+	fn test_formula_roundtrip() {
 		let expect = expect![[r#"
 {
   "formula": {
     "formula.v1": {
-      "image": {
-        "reference": "docker.io/busybox:latest",
-        "readonly": true
-      },
       "inputs": {
         "/": "ware:tar:4z9DCTxoKkStqXQRwtf9nimpfQQ36dbndDsAPCQgECfbXt3edanUrsVKCjE9TkX2v9",
         "/some/ro/path": "mount:ro:/host/readonly/path",

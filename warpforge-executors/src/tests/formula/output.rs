@@ -18,11 +18,9 @@ fn formula_exec_runc_output() {
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
 		"formula": {
 			"formula.v1": {
-				"image": {
-					"reference": "docker.io/busybox:latest",
-					"readonly": true,
+				"inputs": {
+					"/": "oci:docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564",
 				},
-				"inputs": {},
 				"action": {
 					"script": {
 						"interpreter": "/bin/sh",
@@ -79,11 +77,9 @@ fn formula_exec_runc_multiple_outputs() {
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
 		"formula": {
 			"formula.v1": {
-				"image": {
-					"reference": "docker.io/busybox:latest",
-					"readonly": true,
+				"inputs": {
+					"/": "oci:docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564",
 				},
-				"inputs": {},
 				"action": {
 					"script": {
 						"interpreter": "/bin/sh",

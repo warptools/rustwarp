@@ -1,8 +1,10 @@
 use indexmap::{IndexMap, IndexSet};
+use oci_client::Reference;
+use oci_unpack::{pull_image_manifest, PullConfig};
 use tempfile::TempDir;
 use warpforge_api::formula::{
 	Formula, FormulaAndContext, FormulaCapsule, FormulaContext, FormulaContextCapsule,
-	FormulaInput, GatherDirective, Mount,
+	FormulaInput, GatherDirective, Mount, SandboxPort,
 };
 use warpforge_api::plot::{LocalLabel, Plot, PlotCapsule, PlotInput, PlotOutput, Step, StepName};
 use warpforge_terminal::{logln, Bar};
@@ -115,12 +117,6 @@ impl<'a> PlotExecutor<'a> {
 			..self.context.clone()
 		};
 
-		let image = self.plot.image.as_ref().or(step.image.as_ref());
-		let Some(image) = image else {
-			let msg = format!("invalid plot (step '{step_name}'): image required");
-			return Err(Error::SystemSetupCauseless { msg });
-		};
-
 		let mut inputs = IndexMap::new();
 		for (port, input) in &step.inputs {
 			let input = match input {
@@ -142,6 +138,9 @@ impl<'a> PlotExecutor<'a> {
 							PlotInput::Literal(literal) => {
 								FormulaInput::Literal(literal.to_owned())
 							}
+							PlotInput::OCIReference(reference) => {
+								self.transform_oci_input(port, reference)?
+							}
 							PlotInput::Pipe(_) => {
 								let msg = "invalid plot: plot inputs may not contain pipes".into();
 								return Err(Error::SystemSetupCauseless { msg });
@@ -156,6 +155,7 @@ impl<'a> PlotExecutor<'a> {
 						FormulaInput::Mount(Mount::ReadOnly(to_string_or_panic(path)))
 					}
 				}
+				PlotInput::OCIReference(reference) => self.transform_oci_input(port, reference)?,
 				PlotInput::CatalogRef(_catalog_ref) => todo!(),
 				PlotInput::Ingest(_ingest) => todo!(),
 			};
@@ -174,7 +174,6 @@ impl<'a> PlotExecutor<'a> {
 			.collect::<IndexMap<_, _>>();
 
 		let formula = Formula {
-			image: image.clone(),
 			inputs,
 			action: step.action.clone(),
 			outputs,
@@ -201,6 +200,35 @@ impl<'a> PlotExecutor<'a> {
 		}
 
 		Ok(())
+	}
+
+	fn transform_oci_input(&self, port: &SandboxPort, reference: &str) -> Result<FormulaInput> {
+		if port.0 != "/" {
+			let msg = "inputs of type 'oci' are currently only allowed for port '/'".into();
+			return Err(Error::SystemSetupCauseless { msg });
+		}
+
+		let mut reference: Reference =
+			(reference.parse()).map_err(|err| Error::SystemSetupError {
+				msg: "failed to parse image reference".into(),
+				cause: Box::new(err),
+			})?;
+
+		// Resolve digest if it was not specified.
+		if reference.digest().is_none() {
+			let pull_config = PullConfig {
+				cache: self.context.image_cache.clone(),
+				..PullConfig::default()
+			};
+			let digest = pull_image_manifest(&reference, &pull_config).map_err(|err| {
+				let msg = "failed to resolve OCI Reference".into();
+				let cause = Box::new(err);
+				Error::SystemSetupError { msg, cause }
+			})?;
+			reference = reference.clone_with_digest(digest);
+		}
+
+		Ok(FormulaInput::OCIReference(reference.to_string()))
 	}
 }
 

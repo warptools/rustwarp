@@ -26,11 +26,8 @@ fn runc_overlayfs_mount() {
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
 		"formula": {
 			"formula.v1": {
-				"image": {
-					"reference": "docker.io/busybox:latest",
-					"readonly": true,
-				},
 				"inputs": {
+					"/": "oci:docker.io/library/busybox@sha256:22f27168517de1f58dae0ad51eacf1527e7e7ccc47512d3946f56bdbe913f564",
 					"/container/overlay": format!("mount:overlay:{}", overlay_dir.to_str().unwrap()),
 					"/container/output": format!("mount:rw:{}", output_dir.to_str().unwrap()),
 				},
