@@ -6,7 +6,6 @@ edition.workspace = true
 [dependencies]
 oci-spec = "*"
 file-mode = "*"
-flate2 = "*"
 filetime = "*"
 # Using tokio so we can correctly use oci-client.
 # Using runtimes like async-std or futures-executor lead to problems while testing.
@@ -19,3 +18,4 @@ serde_json.workspace = true
 sha2.workspace = true
 tar.workspace = true
 indexmap.workspace = true
+flate2.workspace = true

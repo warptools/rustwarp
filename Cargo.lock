@@ -2212,6 +2212,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "expect-test",
+ "flate2",
  "indexmap 2.6.0",
  "json-patch",
  "oci-client",

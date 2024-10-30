@@ -4,6 +4,7 @@ use std::{
 	path::{Path, PathBuf},
 };
 
+use flate2::{write::GzEncoder, Compression};
 use oci_unpack::tee::WriteExt;
 use sha2::{Digest, Sha384};
 use warpforge_api::content::Packtype;
@@ -18,7 +19,7 @@ pub(crate) struct IntermediateOutput {
 
 pub(crate) enum OutputPacktype {
 	None,
-	Tar,
+	TarGzip,
 }
 
 impl OutputPacktype {
@@ -26,9 +27,9 @@ impl OutputPacktype {
 		Ok(match packtype {
 			None => OutputPacktype::None,
 			Some(Packtype(p)) if p == "none" => OutputPacktype::None,
-			Some(Packtype(p)) if p == "tar" => OutputPacktype::Tar,
+			Some(Packtype(p)) if p == "tgz" => OutputPacktype::TarGzip,
 			_ => {
-				let msg = "unsupported packtype (allowed values: 'none', 'tar')".into();
+				let msg = "unsupported packtype (allowed values: 'none', 'tgz')".into();
 				return Err(Error::SystemSetupCauseless { msg });
 			}
 		})
@@ -68,7 +69,7 @@ pub(crate) fn pack_outputs(
 				})?;
 				tar_dir_hash_only(name, target)?
 			}
-			OutputPacktype::Tar => tar_dir_to_file(name, host_path, &target)?,
+			OutputPacktype::TarGzip => tgz_dir_to_file(name, host_path, &target)?,
 		};
 		results.push(output);
 	}
@@ -85,7 +86,7 @@ pub(crate) fn tar_dir_hash_only(name: &str, source_dir: impl AsRef<Path>) -> Res
 	Ok(Output { name, digest })
 }
 
-pub(crate) fn tar_dir_to_file(
+pub(crate) fn tgz_dir_to_file(
 	name: &str,
 	source_dir: impl AsRef<Path>,
 	target_file: impl AsRef<Path>,
@@ -99,6 +100,8 @@ pub(crate) fn tar_dir_to_file(
 
 	let mut digester = Sha384::new();
 	let writer = writer.tee(&mut digester);
+
+	let writer = GzEncoder::new(writer, Compression::fast());
 
 	tar_dir(source_dir, writer)?;
 

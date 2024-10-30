@@ -1,5 +1,6 @@
 use std::{fs::File, io::Read, path::PathBuf};
 
+use flate2::read::GzDecoder;
 use serde_json::json;
 use tar::Archive;
 use tempfile::TempDir;
@@ -31,9 +32,9 @@ fn formula_exec_runc_output() {
 					}
 				},
 				"outputs": {
-					"output.tar": {
+					"output.tgz": {
 						"from": "/out",
-						"packtype": "tar"
+						"packtype": "tgz"
 					},
 				},
 			}
@@ -53,12 +54,13 @@ fn formula_exec_runc_output() {
 
 	assert_eq!(result.exit_code, Some(0));
 	assert_eq!(result.outputs, vec![Output {
-		name: "output.tar".into(),
-		digest: Digest::Sha384("39906bae799176280345a22a29458b2567f6a1ca373c5483d4cbae0fb0c224c519727f83f7beadf9f7b85731668ad2a1".into())
+		name: "output.tgz".into(),
+		digest: Digest::Sha384("64518bf7b504749270619507457adc3c86d46ccbb86c8b06508591aed483c1a5db728086dba261ff05f453dfd2c315d5".into())
 	}]);
 
 	// Unpack output.tar and check contents.
-	let reader = File::open(temp_dir.path().join("output.tar")).unwrap();
+	let reader = File::open(temp_dir.path().join("output.tgz")).unwrap();
+	let reader = GzDecoder::new(reader);
 	let mut archive = Archive::new(reader);
 	let mut entries = archive.entries().unwrap();
 	let mut entry = entries.next().unwrap().unwrap();
@@ -94,13 +96,13 @@ fn formula_exec_runc_multiple_outputs() {
 					}
 				},
 				"outputs": {
-					"output_1.tar": {
+					"output_1.tgz": {
 						"from": "/out/1",
-						"packtype": "tar"
+						"packtype": "tgz"
 					},
-					"output_2.tar": {
+					"output_2.tgz": {
 						"from": "/out/2",
-						"packtype": "tar"
+						"packtype": "tgz"
 					},
 				},
 			}
@@ -121,12 +123,12 @@ fn formula_exec_runc_multiple_outputs() {
 	assert_eq!(result.exit_code, Some(0));
 	assert_eq!(result.outputs, vec![
 		Output {
-			name: "output_1.tar".into(),
-			digest: Digest::Sha384("94fce6489a4060aefb303bfc8e2d4b89e02860f904c38a717da8189c68d88d9a1bd32641f71ffa648f496c6cc837507f".into())
+			name: "output_1.tgz".into(),
+			digest: Digest::Sha384("dbdb8a42228f80b47f18dceab1994e59820ef26fd5b74db9e7298b77907ba25c00f6920d893670d0bc366c2ed4052047".into())
 		},
 		Output {
-			name: "output_2.tar".into(),
-			digest: Digest::Sha384("120620d4ad89b8f9d7c1e48ca4a67e6f884d7a3ce9940f3a6747d2afab3b987775bbd3f2099711cf57139b429c7d1618".into())
+			name: "output_2.tgz".into(),
+			digest: Digest::Sha384("885741449883286ea479ac9e71a7cab2b8f75cf25960f88168c56f3645f39c206f59932e20735f91e39ccb892f62b529".into())
 		},
 	]);
 }

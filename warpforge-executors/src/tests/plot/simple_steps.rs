@@ -59,13 +59,16 @@ fn plot_simple_steps() {
 							}
 						},
 						"outputs": {
-							"out": { "from": "/out" }
+							"out": {
+								"from": "/out",
+								"packtype": "tgz",
+							}
 						}
 					}
 				}
 			},
 			"outputs": {
-				"output.tar": "pipe:output:out"
+				"output.tgz": "pipe:output:out"
 			}
 		}
 	}))
@@ -80,8 +83,8 @@ fn plot_simple_steps() {
 	let outputs = run_plot(plot, &context).unwrap();
 
 	assert_eq!(outputs, vec![Output{
-		name: "output.tar".into(),
-		digest: crate::Digest::Sha384("bd00d1ecdaa6988962460b5288953ba8c504f876bd2134b95aa3ef3df993f7fbc6be147898fc94b5f5cff476584d0fd4".into()),
+		name: "output.tgz".into(),
+		digest: crate::Digest::Sha384("4616df8a46fccfa6e418d623b19ea20545cef530b369b0071a8b691d3bf2a9628d4350f065ab60f37a96515921c5e8e4".into()),
 	}]);
 }
 
