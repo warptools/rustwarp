@@ -10,6 +10,8 @@ warpforge-terminal = { path = "../warpforge-terminal" }
 warpforge-visualize = { path = "../warpforge-visualize" }
 
 clap = { version = "4.3.0", features = ["derive"] }
-serde = { version = "1" }
-serde_json = { version = "1" }
+ariadne = "*"
+
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true

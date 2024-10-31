@@ -1,17 +1,20 @@
 use std::{
 	env::current_dir,
+	ffi::OsStr,
 	fs::{self, File},
 	io::BufReader,
 	path::{Path, PathBuf},
 };
 
+use ariadne::{ColorGenerator, Label, Source};
+use serde_json::error::Category;
 use warpforge_api::{
 	constants::{MAGIC_FILENAME_MODULE, MAGIC_FILENAME_PLOT},
 	formula::FormulaAndContext,
 	plot::PlotCapsule,
 };
 use warpforge_executors::{context::Context, formula::run_formula, plot::run_plot, Digest};
-use warpforge_terminal::logln;
+use warpforge_terminal::{log_global, logln, Level};
 
 use crate::{cmds::Root, Error};
 
@@ -84,12 +87,29 @@ fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 }
 
 fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
-	let file = File::open(&path).map_err(|e| Error::InvalidArguments { cause: Box::new(e) })?;
+	let file = File::open(&path).map_err(|err| {
+		let cause = format!("failed to open formula file: {err}").into();
+		Error::InvalidArguments { cause }
+	})?;
 	let reader = BufReader::new(file);
-	let formula: FormulaAndContext =
-		serde_json::from_reader(reader).map_err(|e| Error::InvalidArguments {
-			cause: format!("invalid formula file: {e}").into(),
-		})?;
+	let formula: FormulaAndContext = match serde_json::from_reader(reader) {
+		Ok(formula) => formula,
+		Err(err) => match err.classify() {
+			Category::Io => {
+				let cause = format!("failed to read formula file: {err}").into();
+				return Err(Error::InvalidArguments { cause });
+			}
+			Category::Eof => {
+				let cause = format!("failed to parse formula file: {err}").into();
+				return Err(Error::InvalidArguments { cause });
+			}
+			Category::Syntax | Category::Data => {
+				display_error(path, &err);
+				let cause = format!("invalid formula file: {err}").into();
+				return Err(Error::InvalidArguments { cause });
+			}
+		},
+	};
 
 	let parent = parent(path)?;
 	let context = Context {
@@ -108,6 +128,68 @@ fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 	}
 
 	Ok(())
+}
+
+fn display_error(path: impl AsRef<Path>, err: &serde_json::Error) {
+	use ariadne::{Report, ReportKind};
+
+	if err.line() < 1 {
+		return;
+	}
+	let Ok(source) = fs::read_to_string(path.as_ref()) else {
+		return; // Return on error: Not worth handling further errors at this point.
+	};
+
+	let line_offset: usize = source
+		.split_inclusive('\n')
+		.take(err.line() - 1)
+		.map(|line| line.chars().count())
+		.sum();
+	let offset = line_offset + err.column() - 1;
+	let mut error_range = offset..offset;
+	let mut label = "here";
+
+	// Find trailing comma, since serde_json points to closing braces instead of comma.
+	// `serde_json::Error` does not allow us to match the concrete error kind,
+	// so we look at the emitted error message.
+	if err.is_syntax() && format!("{err}").contains("trailing comma") {
+		let mut source: Vec<_> = source.chars().take(offset).collect();
+		while let Some(last) = source.pop() {
+			if last == ',' {
+				error_range = source.len()..source.len() + 1;
+				label = "trailing comma";
+				break;
+			}
+			if !last.is_whitespace() {
+				break;
+			}
+		}
+	}
+
+	let file_name = path
+		.as_ref()
+		.file_name()
+		.and_then(OsStr::to_str)
+		.unwrap_or("");
+
+	let color = ColorGenerator::new().next();
+	let report = Report::build(ReportKind::Error, (file_name, error_range.clone()))
+		.with_message(format!("{err}"))
+		.with_label(
+			Label::new((file_name, error_range))
+				.with_message(label)
+				.with_color(color),
+		)
+		.finish();
+
+	let mut message = Vec::new();
+	let result = report.write((file_name, Source::from(source)), &mut message);
+	if result.is_err() {
+		return;
+	}
+	if let Ok(message) = String::from_utf8(message) {
+		log_global(Level::Error, message);
+	}
 }
 
 fn parent(path: impl AsRef<Path>) -> Result<PathBuf, Error> {
