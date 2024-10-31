@@ -7,7 +7,7 @@ use warpforge_api::formula::FormulaAndContext;
 use crate::tests::{default_context, run_formula_collect_output};
 
 #[test]
-fn runc_overlayfs_mount() {
+fn overlayfs_mount() {
 	let temp_dir = TempDir::new().unwrap();
 	let overlay_dir = temp_dir.path().join("overlay_lower");
 	let output_dir = temp_dir.path().join("rw");

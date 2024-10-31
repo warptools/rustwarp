@@ -24,10 +24,13 @@ struct RunOutputLine {
 }
 
 fn default_context() -> Context {
-	let image_cache = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.images");
+	let runtime = env::var("WARPFORGE_TEST_RUNTIME")
+		.unwrap_or("runc".into())
+		.into();
+	let image_cache = Some(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.images"));
 	Context {
-		runtime: "runc".into(),
-		image_cache: Some(image_cache),
+		runtime,
+		image_cache,
 		..Default::default()
 	}
 }

@@ -4,7 +4,7 @@ use warpforge_api::formula::FormulaAndContext;
 use crate::tests::{default_context, run_formula_collect_output, RunOutputLine};
 
 #[test]
-fn formula_exec_runc_it_works() {
+fn formula_exec() {
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
 		"formula": {
 			"formula.v1": {
@@ -45,7 +45,7 @@ fn formula_exec_runc_it_works() {
 }
 
 #[test]
-fn formula_script_runc_it_works() {
+fn formula_script() {
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
 	"formula": {
 		"formula.v1": {

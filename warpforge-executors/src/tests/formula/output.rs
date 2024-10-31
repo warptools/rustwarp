@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[test]
-fn formula_exec_runc_output() {
+fn tgz_output() {
 	let temp_dir = TempDir::new().unwrap();
 
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({
@@ -71,7 +71,7 @@ fn formula_exec_runc_output() {
 }
 
 #[test]
-fn formula_exec_runc_multiple_outputs() {
+fn multiple_tgz_outputs() {
 	let temp_dir = TempDir::new().unwrap();
 
 	let formula_and_context: FormulaAndContext = serde_json::from_value(json!({

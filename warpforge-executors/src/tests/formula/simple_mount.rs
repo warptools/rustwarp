@@ -7,7 +7,7 @@ use warpforge_api::formula::FormulaAndContext;
 use crate::tests::{default_context, run_formula_collect_output};
 
 #[test]
-fn runc_rbind_mounts() {
+fn rbind_mounts() {
 	let temp_dir = TempDir::new().unwrap();
 	let input_dir = temp_dir.path().join("ro");
 	let output_dir = temp_dir.path().join("rw");
@@ -60,7 +60,7 @@ fn runc_rbind_mounts() {
 }
 
 #[test]
-fn runc_rbind_mounts_relative_path() {
+fn rbind_mounts_relative_path() {
 	let temp_dir = TempDir::new().unwrap();
 	let input_dir = temp_dir.path().join("ro_dir");
 	let output_dir = temp_dir.path().join("nested").join("rw_dir");
@@ -116,7 +116,7 @@ fn runc_rbind_mounts_relative_path() {
 }
 
 #[test]
-fn runc_cannot_write_to_ro_mount() {
+fn cannot_write_to_ro_mount() {
 	let temp_dir = TempDir::new().unwrap();
 	let input_dir = temp_dir.path().join("ro");
 	fs::create_dir(&input_dir).unwrap();
