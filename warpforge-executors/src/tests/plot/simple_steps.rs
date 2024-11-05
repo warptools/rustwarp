@@ -91,7 +91,7 @@ fn plot_simple_steps() {
 }
 
 #[test]
-fn plot_simple_steps_magled_order() {
+fn plot_simple_steps_mangled_order() {
 	let plot: PlotCapsule = serde_json::from_value(json!({
 		"plot.v1": {
 			"inputs": {

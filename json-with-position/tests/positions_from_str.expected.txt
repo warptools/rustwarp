@@ -1,0 +1,425 @@
+ValuePos {
+    start: Position {
+        line: 1,
+        column: 1,
+        byte_offset: 0,
+    },
+    end: Position {
+        line: 18,
+        column: 2,
+        byte_offset: 229,
+    },
+    value: Object(
+        {
+            "string": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 2,
+                        column: 12,
+                        byte_offset: 13,
+                    },
+                    end: Position {
+                        line: 2,
+                        column: 24,
+                        byte_offset: 25,
+                    },
+                    value: Primitive(
+                        String("some value"),
+                    ),
+                },
+                key_start: Position {
+                    line: 2,
+                    column: 2,
+                    byte_offset: 3,
+                },
+                key_end: Position {
+                    line: 2,
+                    column: 10,
+                    byte_offset: 11,
+                },
+            },
+            "number": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 3,
+                        column: 12,
+                        byte_offset: 38,
+                    },
+                    end: Position {
+                        line: 3,
+                        column: 13,
+                        byte_offset: 39,
+                    },
+                    value: Primitive(
+                        Number(5),
+                    ),
+                },
+                key_start: Position {
+                    line: 3,
+                    column: 2,
+                    byte_offset: 28,
+                },
+                key_end: Position {
+                    line: 3,
+                    column: 10,
+                    byte_offset: 36,
+                },
+            },
+            "array": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 4,
+                        column: 13,
+                        byte_offset: 52,
+                    },
+                    end: Position {
+                        line: 4,
+                        column: 25,
+                        byte_offset: 64,
+                    },
+                    value: Array(
+                        [
+                            ValuePos {
+                                start: Position {
+                                    line: 4,
+                                    column: 14,
+                                    byte_offset: 53,
+                                },
+                                end: Position {
+                                    line: 4,
+                                    column: 15,
+                                    byte_offset: 54,
+                                },
+                                value: Primitive(
+                                    Number(1),
+                                ),
+                            },
+                            ValuePos {
+                                start: Position {
+                                    line: 4,
+                                    column: 17,
+                                    byte_offset: 56,
+                                },
+                                end: Position {
+                                    line: 4,
+                                    column: 24,
+                                    byte_offset: 63,
+                                },
+                                value: Primitive(
+                                    String("entry"),
+                                ),
+                            },
+                        ],
+                    ),
+                },
+                key_start: Position {
+                    line: 4,
+                    column: 4,
+                    byte_offset: 43,
+                },
+                key_end: Position {
+                    line: 4,
+                    column: 11,
+                    byte_offset: 50,
+                },
+            },
+            "bool": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 5,
+                        column: 10,
+                        byte_offset: 75,
+                    },
+                    end: Position {
+                        line: 5,
+                        column: 14,
+                        byte_offset: 79,
+                    },
+                    value: Primitive(
+                        Bool(true),
+                    ),
+                },
+                key_start: Position {
+                    line: 5,
+                    column: 2,
+                    byte_offset: 67,
+                },
+                key_end: Position {
+                    line: 5,
+                    column: 8,
+                    byte_offset: 73,
+                },
+            },
+            "null": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 6,
+                        column: 10,
+                        byte_offset: 90,
+                    },
+                    end: Position {
+                        line: 6,
+                        column: 14,
+                        byte_offset: 94,
+                    },
+                    value: Primitive(
+                        Null,
+                    ),
+                },
+                key_start: Position {
+                    line: 6,
+                    column: 2,
+                    byte_offset: 82,
+                },
+                key_end: Position {
+                    line: 6,
+                    column: 8,
+                    byte_offset: 88,
+                },
+            },
+            "map": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 7,
+                        column: 9,
+                        byte_offset: 104,
+                    },
+                    end: Position {
+                        line: 10,
+                        column: 3,
+                        byte_offset: 153,
+                    },
+                    value: Object(
+                        {
+                            "map-entry": MapEntry {
+                                value: ValuePos {
+                                    start: Position {
+                                        line: 8,
+                                        column: 16,
+                                        byte_offset: 121,
+                                    },
+                                    end: Position {
+                                        line: 8,
+                                        column: 21,
+                                        byte_offset: 126,
+                                    },
+                                    value: Primitive(
+                                        Bool(false),
+                                    ),
+                                },
+                                key_start: Position {
+                                    line: 8,
+                                    column: 3,
+                                    byte_offset: 108,
+                                },
+                                key_end: Position {
+                                    line: 8,
+                                    column: 14,
+                                    byte_offset: 119,
+                                },
+                            },
+                            "nested": MapEntry {
+                                value: ValuePos {
+                                    start: Position {
+                                        line: 9,
+                                        column: 13,
+                                        byte_offset: 140,
+                                    },
+                                    end: Position {
+                                        line: 9,
+                                        column: 23,
+                                        byte_offset: 150,
+                                    },
+                                    value: Array(
+                                        [
+                                            ValuePos {
+                                                start: Position {
+                                                    line: 9,
+                                                    column: 14,
+                                                    byte_offset: 141,
+                                                },
+                                                end: Position {
+                                                    line: 9,
+                                                    column: 22,
+                                                    byte_offset: 149,
+                                                },
+                                                value: Array(
+                                                    [
+                                                        ValuePos {
+                                                            start: Position {
+                                                                line: 9,
+                                                                column: 15,
+                                                                byte_offset: 142,
+                                                            },
+                                                            end: Position {
+                                                                line: 9,
+                                                                column: 21,
+                                                                byte_offset: 148,
+                                                            },
+                                                            value: Array(
+                                                                [
+                                                                    ValuePos {
+                                                                        start: Position {
+                                                                            line: 9,
+                                                                            column: 16,
+                                                                            byte_offset: 143,
+                                                                        },
+                                                                        end: Position {
+                                                                            line: 9,
+                                                                            column: 20,
+                                                                            byte_offset: 147,
+                                                                        },
+                                                                        value: Primitive(
+                                                                            Bool(true),
+                                                                        ),
+                                                                    },
+                                                                ],
+                                                            ),
+                                                        },
+                                                    ],
+                                                ),
+                                            },
+                                        ],
+                                    ),
+                                },
+                                key_start: Position {
+                                    line: 9,
+                                    column: 3,
+                                    byte_offset: 130,
+                                },
+                                key_end: Position {
+                                    line: 9,
+                                    column: 11,
+                                    byte_offset: 138,
+                                },
+                            },
+                        },
+                    ),
+                },
+                key_start: Position {
+                    line: 7,
+                    column: 2,
+                    byte_offset: 97,
+                },
+                key_end: Position {
+                    line: 7,
+                    column: 7,
+                    byte_offset: 102,
+                },
+            },
+            "leading-commas": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 11,
+                        column: 20,
+                        byte_offset: 174,
+                    },
+                    end: Position {
+                        line: 17,
+                        column: 3,
+                        byte_offset: 227,
+                    },
+                    value: Array(
+                        [
+                            ValuePos {
+                                start: Position {
+                                    line: 12,
+                                    column: 3,
+                                    byte_offset: 178,
+                                },
+                                end: Position {
+                                    line: 12,
+                                    column: 14,
+                                    byte_offset: 189,
+                                },
+                                value: Primitive(
+                                    String("arr-entry"),
+                                ),
+                            },
+                            ValuePos {
+                                start: Position {
+                                    line: 13,
+                                    column: 5,
+                                    byte_offset: 194,
+                                },
+                                end: Position {
+                                    line: 16,
+                                    column: 4,
+                                    byte_offset: 224,
+                                },
+                                value: Object(
+                                    {
+                                        "a": MapEntry {
+                                            value: ValuePos {
+                                                start: Position {
+                                                    line: 14,
+                                                    column: 9,
+                                                    byte_offset: 204,
+                                                },
+                                                end: Position {
+                                                    line: 14,
+                                                    column: 12,
+                                                    byte_offset: 207,
+                                                },
+                                                value: Primitive(
+                                                    String("b"),
+                                                ),
+                                            },
+                                            key_start: Position {
+                                                line: 14,
+                                                column: 4,
+                                                byte_offset: 199,
+                                            },
+                                            key_end: Position {
+                                                line: 14,
+                                                column: 7,
+                                                byte_offset: 202,
+                                            },
+                                        },
+                                        "c": MapEntry {
+                                            value: ValuePos {
+                                                start: Position {
+                                                    line: 15,
+                                                    column: 9,
+                                                    byte_offset: 217,
+                                                },
+                                                end: Position {
+                                                    line: 15,
+                                                    column: 12,
+                                                    byte_offset: 220,
+                                                },
+                                                value: Primitive(
+                                                    String("d"),
+                                                ),
+                                            },
+                                            key_start: Position {
+                                                line: 15,
+                                                column: 4,
+                                                byte_offset: 212,
+                                            },
+                                            key_end: Position {
+                                                line: 15,
+                                                column: 7,
+                                                byte_offset: 215,
+                                            },
+                                        },
+                                    },
+                                ),
+                            },
+                        ],
+                    ),
+                },
+                key_start: Position {
+                    line: 11,
+                    column: 2,
+                    byte_offset: 156,
+                },
+                key_end: Position {
+                    line: 11,
+                    column: 18,
+                    byte_offset: 172,
+                },
+            },
+        },
+    ),
+}

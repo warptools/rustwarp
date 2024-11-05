@@ -1,0 +1,43 @@
+ValuePos {
+    start: Position {
+        line: 1,
+        column: 1,
+        byte_offset: 0,
+    },
+    end: Position {
+        line: 3,
+        column: 2,
+        byte_offset: 25,
+    },
+    value: Object(
+        {
+            "json": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 2,
+                        column: 10,
+                        byte_offset: 11,
+                    },
+                    end: Position {
+                        line: 2,
+                        column: 22,
+                        byte_offset: 23,
+                    },
+                    value: Primitive(
+                        String("some value"),
+                    ),
+                },
+                key_start: Position {
+                    line: 2,
+                    column: 2,
+                    byte_offset: 3,
+                },
+                key_end: Position {
+                    line: 2,
+                    column: 8,
+                    byte_offset: 9,
+                },
+            },
+        },
+    ),
+}

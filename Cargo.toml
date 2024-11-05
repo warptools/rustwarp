@@ -1,15 +1,16 @@
 [workspace]
 resolver = "2"
 members = [
+    "catverters",
+    "catverters-derive",
+    "json-with-position",
+    "oci-unpack",
+    "testfiles-derive",
     "warpforge-api",
     "warpforge-cli",
     "warpforge-executors",
     "warpforge-terminal",
     "warpforge-visualize",
-    "catverters",
-    "catverters-derive",
-    "testfiles-derive",
-    "oci-unpack",
 ]
 
 [workspace.package]
