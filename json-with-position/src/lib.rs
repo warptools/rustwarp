@@ -1,4 +1,4 @@
-use std::{cell::RefCell, io::Read, rc::Rc};
+use std::{cell::RefCell, io::Read};
 
 use indexmap::IndexMap;
 use serde::de::{DeserializeSeed, Deserializer, Unexpected, Visitor};
@@ -9,14 +9,18 @@ pub fn from_str(input: &str) -> ValuePos {
 }
 
 pub fn from_slice(input: &[u8]) -> ValuePos {
-	let read = LineColReader::new(input);
-	let position = read.position.clone();
+	let position = RefCell::new(Position {
+		line: 1,
+		column: 1,
+		byte_offset: 0,
+	});
+	let read = LineColReader::new(&position, input);
 
 	let mut json_deserializer = JsonDeserializer::from_reader(read);
 	let start_pos = position.borrow().clone();
 	let deserializer = ValuePosDeserializer {
 		start_pos,
-		cur_pos: position.clone(),
+		cur_pos: &position,
 	};
 	let mut value = deserializer.deserialize(&mut json_deserializer).unwrap();
 	json_deserializer.end().unwrap();
@@ -166,24 +170,24 @@ impl core::hash::Hash for Value {
 	}
 }
 
-struct ValuePosDeserializer {
+struct ValuePosDeserializer<'de> {
 	start_pos: Position,
-	cur_pos: Rc<RefCell<Position>>,
+	cur_pos: &'de RefCell<Position>,
 }
 
-impl<'de> DeserializeSeed<'de> for ValuePosDeserializer {
+impl<'de> DeserializeSeed<'de> for ValuePosDeserializer<'de> {
 	type Value = ValuePos;
 
 	fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
 	where
 		D: Deserializer<'de>,
 	{
-		struct ValuePosVisitor {
+		struct ValuePosVisitor<'de> {
 			start_pos: Position,
-			cur_pos: Rc<RefCell<Position>>,
+			cur_pos: &'de RefCell<Position>,
 		}
 
-		impl ValuePosVisitor {
+		impl ValuePosVisitor<'_> {
 			fn value_pos<E>(self, value: Value) -> Result<ValuePos, E>
 			where
 				E: serde::de::Error,
@@ -196,7 +200,7 @@ impl<'de> DeserializeSeed<'de> for ValuePosDeserializer {
 			}
 		}
 
-		impl<'de> Visitor<'de> for ValuePosVisitor {
+		impl<'de> Visitor<'de> for ValuePosVisitor<'de> {
 			type Value = ValuePos;
 
 			fn expecting(&self, fmt: &mut std::fmt::Formatter) -> std::fmt::Result {
@@ -269,7 +273,7 @@ impl<'de> DeserializeSeed<'de> for ValuePosDeserializer {
 					let start_pos = self.cur_pos.borrow().clone();
 					let Some(entry) = access.next_element_seed(ValuePosDeserializer {
 						start_pos,
-						cur_pos: self.cur_pos.clone(),
+						cur_pos: self.cur_pos,
 					})?
 					else {
 						break;
@@ -298,7 +302,7 @@ impl<'de> DeserializeSeed<'de> for ValuePosDeserializer {
 					let key_end = self.cur_pos.borrow().clone();
 					let value = access.next_value_seed(ValuePosDeserializer {
 						start_pos: key_end.clone(),
-						cur_pos: self.cur_pos.clone(),
+						cur_pos: self.cur_pos,
 					})?;
 					map.insert(
 						key,
@@ -323,25 +327,18 @@ impl<'de> DeserializeSeed<'de> for ValuePosDeserializer {
 	}
 }
 
-struct LineColReader<T: Read> {
-	position: Rc<RefCell<Position>>,
+struct LineColReader<'a, T: Read> {
+	position: &'a RefCell<Position>,
 	inner: T,
 }
 
-impl<T: Read> LineColReader<T> {
-	fn new(read: T) -> Self {
-		Self {
-			position: Rc::new(RefCell::new(Position {
-				line: 1,
-				column: 1,
-				byte_offset: 0,
-			})),
-			inner: read,
-		}
+impl<'a, R: Read> LineColReader<'a, R> {
+	fn new(position: &'a RefCell<Position>, inner: R) -> Self {
+		Self { position, inner }
 	}
 }
 
-impl<T: Read> Read for LineColReader<T> {
+impl<T: Read> Read for LineColReader<'_, T> {
 	fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
 		// Read <= 1 byte at a time.
 		if buffer.is_empty() {
@@ -371,38 +368,6 @@ mod tests {
 
 	use expect_test::expect_file;
 	use indoc::indoc;
-
-	#[allow(dead_code)]
-	fn print_positions(src: &str, value: &ValuePos) {
-		println!("v ---------- v");
-		println!(
-			">>{}<<",
-			&src[value.start.byte_offset..value.end.byte_offset]
-		);
-		println!("^ ---------- ^");
-		println!();
-
-		match &value.value {
-			Value::Primitive(_) => {}
-			Value::Array(vec) => {
-				for v in vec {
-					print_positions(src, v);
-				}
-			}
-			Value::Object(index_map) => {
-				for (_, v) in index_map {
-					println!("v ---------- v");
-					println!(
-						">>{}<<",
-						&src[v.key_start.byte_offset..v.key_end.byte_offset]
-					);
-					println!("^ ---------- ^");
-					println!();
-					print_positions(src, &v.value);
-				}
-			}
-		}
-	}
 
 	#[test]
 	fn positions_from_str_simple() {
@@ -445,8 +410,6 @@ mod tests {
 		"# };
 
 		let parsed = from_str(json);
-		// print_positions(json, &parsed);
-
 		let expected = expect_file!["../tests/positions_from_str.expected.txt"];
 		expected.assert_debug_eq(&parsed);
 	}
