@@ -4,11 +4,11 @@ use indexmap::IndexMap;
 use serde::de::{DeserializeSeed, Deserializer, Unexpected, Visitor};
 use serde_json::{Deserializer as JsonDeserializer, Number};
 
-pub fn from_str(input: &str) -> ValuePos {
+pub fn from_str(input: &str) -> serde_json::Result<ValuePos> {
 	from_slice(input.as_bytes())
 }
 
-pub fn from_slice(input: &[u8]) -> ValuePos {
+pub fn from_slice(input: &[u8]) -> serde_json::Result<ValuePos> {
 	let position = RefCell::new(Position {
 		line: 1,
 		column: 1,
@@ -22,10 +22,10 @@ pub fn from_slice(input: &[u8]) -> ValuePos {
 		start_pos,
 		cur_pos: &position,
 	};
-	let mut value = deserializer.deserialize(&mut json_deserializer).unwrap();
-	json_deserializer.end().unwrap();
+	let mut value = deserializer.deserialize(&mut json_deserializer)?;
+	json_deserializer.end()?;
 	clean_value_positions(input, &mut value);
-	value
+	Ok(value)
 }
 
 /// Using our approach, the positions we find can contain leading and trailing
@@ -152,6 +152,23 @@ pub struct MapEntry {
 
 	key_start: Position,
 	key_end: Position,
+}
+
+impl ValuePos {
+	pub fn to_serde(self) -> serde_json::Value {
+		match self.value {
+			Value::Primitive(value) => value,
+			Value::Array(vec) => {
+				serde_json::Value::Array(vec.into_iter().map(ValuePos::to_serde).collect())
+			}
+			Value::Object(index_map) => serde_json::Value::Object(
+				index_map
+					.into_iter()
+					.map(|(k, v)| (k, v.value.to_serde()))
+					.collect(),
+			),
+		}
+	}
 }
 
 impl core::hash::Hash for Value {
@@ -377,7 +394,7 @@ mod tests {
 			}
 		"# };
 
-		let parsed = from_str(json);
+		let parsed = from_str(json).unwrap();
 		assert_eq!(parsed.start.line, 1);
 		assert_eq!(parsed.end.line, 3);
 
@@ -409,7 +426,7 @@ mod tests {
 			}
 		"# };
 
-		let parsed = from_str(json);
+		let parsed = from_str(json).unwrap();
 		let expected = expect_file!["../tests/positions_from_str.expected.txt"];
 		expected.assert_debug_eq(&parsed);
 	}

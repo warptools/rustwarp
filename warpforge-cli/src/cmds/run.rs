@@ -6,15 +6,13 @@ use std::{
 	path::{Path, PathBuf},
 };
 
-use ariadne::{ColorGenerator, Label, Source};
-use serde_json::error::Category;
 use warpforge_api::{
 	constants::{MAGIC_FILENAME_MODULE, MAGIC_FILENAME_PLOT},
-	formula::FormulaAndContext,
 	plot::PlotCapsule,
 };
 use warpforge_executors::{context::Context, formula::run_formula, plot::run_plot, Digest};
 use warpforge_terminal::{log_global, logln, Level};
+use warpforge_validate::validate_formula;
 
 use crate::{cmds::Root, Error};
 
@@ -87,37 +85,28 @@ fn execute_module(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 }
 
 fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
-	let file = File::open(&path).map_err(|err| {
-		let cause = format!("failed to open formula file: {err}").into();
+	let source = fs::read_to_string(&path).map_err(|err| {
+		let cause = format!("failed to read formula file: {err}").into();
 		Error::InvalidArguments { cause }
 	})?;
-	let reader = BufReader::new(file);
-	let formula: FormulaAndContext = match serde_json::from_reader(reader) {
+
+	let result = validate_formula(&source);
+	let validated_formula = match result {
 		Ok(formula) => formula,
-		Err(err) => match err.classify() {
-			Category::Io => {
-				let cause = format!("failed to read formula file: {err}").into();
-				return Err(Error::InvalidArguments { cause });
-			}
-			Category::Eof => {
-				let cause = format!("failed to parse formula file: {err}").into();
-				return Err(Error::InvalidArguments { cause });
-			}
-			Category::Syntax | Category::Data => {
-				display_error(path, &err);
-				let cause = format!("invalid formula file: {err}").into();
-				return Err(Error::InvalidArguments { cause });
-			}
-		},
+		Err(err) => {
+			display_error(&err, &source, &path);
+			let cause = format!("invalid formula file: {err}").into();
+			return Err(Error::InvalidArguments { cause });
+		}
 	};
 
-	let parent = parent(path)?;
+	let parent = parent(&path)?;
 	let context = Context {
 		runtime: cmd.runtime.to_owned(),
 		mount_path: Some(parent),
 		..Default::default()
 	};
-	let outputs = run_formula(formula, &context)?;
+	let outputs = run_formula(validated_formula.formula, &context)?;
 
 	for output in outputs {
 		let warpforge_executors::Output {
@@ -130,63 +119,73 @@ fn execute_formula(cmd: &Cmd, path: impl AsRef<Path>) -> Result<(), Error> {
 	Ok(())
 }
 
-fn display_error(path: impl AsRef<Path>, err: &serde_json::Error) {
-	use ariadne::{Report, ReportKind};
+fn display_error(err: &warpforge_validate::Error, source: &str, path: impl AsRef<Path>) {
+	use ariadne::{ColorGenerator, IndexType, Label, Report, ReportKind, Source};
 
-	if err.line() < 1 {
-		return;
-	}
-	let Ok(source) = fs::read_to_string(path.as_ref()) else {
-		return; // Return on error: Not worth handling further errors at this point.
-	};
+	let warpforge_validate::Error::Invalid { errors } = err;
 
-	let line_offset: usize = source
-		.split_inclusive('\n')
-		.take(err.line() - 1)
-		.map(|line| line.chars().count())
-		.sum();
-	let offset = line_offset + err.column() - 1;
-	let mut error_range = offset..offset;
-	let mut label = "here";
-
-	// Find trailing comma, since serde_json points to closing braces instead of comma.
-	// `serde_json::Error` does not allow us to match the concrete error kind,
-	// so we look at the emitted error message.
-	if err.is_syntax() && format!("{err}").contains("trailing comma") {
-		let mut source: Vec<_> = source.chars().take(offset).collect();
-		while let Some(last) = source.pop() {
-			if last == ',' {
-				error_range = source.len()..source.len() + 1;
-				label = "trailing comma";
-				break;
-			}
-			if !last.is_whitespace() {
-				break;
-			}
-		}
-	}
-
-	let file_name = path
-		.as_ref()
-		.file_name()
+	let file_name = (path.as_ref().file_name())
 		.and_then(OsStr::to_str)
 		.unwrap_or("");
+	let color_primary = ColorGenerator::new().next();
 
-	let color = ColorGenerator::new().next();
-	let report = Report::build(ReportKind::Error, (file_name, error_range.clone()))
-		.with_message(format!("{err}"))
-		.with_label(
-			Label::new((file_name, error_range))
-				.with_message(label)
-				.with_color(color),
+	let trailing_errors: Vec<_> = (errors.iter())
+		.filter(|err| err.is_trailing_comma())
+		.collect();
+	if !trailing_errors.is_empty() {
+		let first_span = (trailing_errors.iter())
+			.filter_map(|err| err.span(source))
+			.next()
+			.unwrap_or_default();
+		let mut report = Report::build(ReportKind::Error, (file_name, first_span))
+			.with_config(ariadne::Config::default().with_index_type(IndexType::Byte))
+			.with_message("found trailing comma(s)");
+		for trailing in trailing_errors {
+			let Some(span) = trailing.span(source) else {
+				continue;
+			};
+			report = report.with_label(
+				Label::new((file_name, span))
+					.with_message("trailing comma")
+					.with_color(color_primary),
+			);
+		}
+
+		print_ariadne_report(report.finish(), (file_name, Source::from(source)));
+	}
+
+	for err in errors.iter().filter(|err| !err.is_trailing_comma()) {
+		let span = err.span(source);
+		let mut report = Report::build(
+			ReportKind::Error,
+			(file_name, span.clone().unwrap_or_default()),
 		)
-		.finish();
+		.with_config(ariadne::Config::default().with_index_type(IndexType::Byte))
+		.with_message(format!("{err}"));
 
+		if let Some(span) = span {
+			report = report.with_label(
+				Label::new((file_name, span))
+					.with_message("here")
+					.with_color(color_primary),
+			);
+		}
+
+		print_ariadne_report(report.finish(), (file_name, Source::from(source)));
+	}
+}
+
+fn print_ariadne_report<S, C>(report: ariadne::Report<'_, S>, cache: C)
+where
+	S: ariadne::Span,
+	C: ariadne::Cache<S::SourceId>,
+{
 	let mut message = Vec::new();
-	let result = report.write((file_name, Source::from(source)), &mut message);
+	let result = report.write(cache, &mut message);
 	if result.is_err() {
 		return;
 	}
+	message.push(b'\n');
 	if let Ok(message) = String::from_utf8(message) {
 		log_global(Level::Error, message);
 	}

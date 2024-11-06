@@ -2225,6 +2225,7 @@ dependencies = [
  "warpforge-api",
  "warpforge-executors",
  "warpforge-terminal",
+ "warpforge-validate",
  "warpforge-visualize",
 ]
 
@@ -2261,6 +2262,19 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "warpforge-validate"
+version = "0.1.0"
+dependencies = [
+ "json-with-position",
+ "oci-unpack",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "warpforge-api",
+ "warpforge-terminal",
 ]
 
 [[package]]
