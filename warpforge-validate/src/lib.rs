@@ -90,14 +90,31 @@ pub fn validate_formula(formula: &str) -> Result<ValidatedFormula> {
 		}
 	};
 
-	match serde_json::from_value(parsed) {
-		Ok(parsed) if errors.is_empty() => Ok(ValidatedFormula { formula: parsed }),
-		Ok(_) => Err(Error::Invalid { errors }),
-		Err(err) => {
+	let deserialize_err = if errors.is_empty() {
+		match serde_json::from_value(parsed) {
+			Ok(validated) => return Ok(ValidatedFormula { formula: validated }),
+			Err(err) => Some(err),
+		}
+	} else {
+		None
+	};
+
+	// Parse again with serde_json::from_slice to get line and column in error.
+	// serde_json::from_value populates line and column with 0.
+	let source = modified_formula.as_deref().unwrap_or(formula.as_bytes());
+	let parse_result = serde_json::from_slice::<FormulaAndContext>(source);
+	match (parse_result, deserialize_err) {
+		(Err(err), _) => {
 			errors.push(ValidationError::Serde(err));
-			Err(Error::Invalid { errors })
+		}
+		(Ok(_), None) => {}
+		(Ok(_), Some(err)) => {
+			debug!("serde_json::from_value found error that serde_json::from_slice did not");
+			errors.push(ValidationError::Serde(err));
 		}
 	}
+
+	Err(Error::Invalid { errors })
 }
 
 pub struct ValidatedFormula {
