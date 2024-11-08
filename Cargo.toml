@@ -8,6 +8,7 @@ members = [
     "testfiles-derive",
     "warpforge-api",
     "warpforge-cli",
+    "warpforge-cfg",
     "warpforge-executors",
     "warpforge-terminal",
     "warpforge-validate",
