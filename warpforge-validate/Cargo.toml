@@ -12,3 +12,4 @@ warpforge-terminal = { path = "../warpforge-terminal" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+oci-client.workspace = true

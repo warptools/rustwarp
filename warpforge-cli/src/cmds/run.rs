@@ -164,11 +164,18 @@ fn display_error(err: &warpforge_validate::Error, source: &str, path: impl AsRef
 		.with_message(format!("{err}"));
 
 		if let Some(span) = span {
+			if span == (0..0) {
+				continue;
+			}
+			let label = err.label().unwrap_or("here");
 			report = report.with_label(
 				Label::new((file_name, span))
-					.with_message("here")
+					.with_message(label)
 					.with_color(color_primary),
 			);
+			if let Some(note) = err.note() {
+				report = report.with_note(note);
+			}
 		}
 
 		print_ariadne_report(report.finish(), (file_name, Source::from(source)));

@@ -2269,6 +2269,7 @@ name = "warpforge-validate"
 version = "0.1.0"
 dependencies = [
  "json-with-position",
+ "oci-client",
  "oci-unpack",
  "serde",
  "serde_json",

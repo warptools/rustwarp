@@ -1,4 +1,4 @@
-use std::{cell::RefCell, io::Read};
+use std::{cell::RefCell, fmt::Formatter, io::Read, ops::Range};
 
 use indexmap::IndexMap;
 use serde::de::{DeserializeSeed, Deserializer, Unexpected, Visitor};
@@ -103,17 +103,17 @@ fn clean_position(src: &[u8], start: &mut Position, end: &mut Position) {
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-struct Position {
-	line: usize,
-	column: usize,
-	byte_offset: usize,
+pub struct Position {
+	pub line: usize,
+	pub column: usize,
+	pub byte_offset: usize,
 }
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct ValuePos {
-	start: Position,
-	end: Position,
-	value: Value,
+	pub start: Position,
+	pub end: Position,
+	pub value: Value,
 }
 
 /// Represents any valid JSON value with positions.
@@ -148,10 +148,10 @@ pub enum Value {
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
 pub struct MapEntry {
-	value: ValuePos,
+	pub value: ValuePos,
 
-	key_start: Position,
-	key_end: Position,
+	pub key_start: Position,
+	pub key_end: Position,
 }
 
 impl ValuePos {
@@ -167,6 +167,48 @@ impl ValuePos {
 					.map(|(k, v)| (k, v.value.to_serde()))
 					.collect(),
 			),
+		}
+	}
+
+	/// Tries to find byte span which is referenced by the given path.
+	pub fn find_span(&self, path: &JsonPath, _target: TargetHint) -> Option<Range<usize>> {
+		let mut value = self;
+		for part in path.0.iter().rev() {
+			match part {
+				PathPart::Array(index) => {
+					value = value.as_array().and_then(|array| array.get(*index))?
+				}
+				PathPart::Object(key) => {
+					value = (value.as_object())
+						.and_then(|object| object.get(key))
+						.map(|map_entry| &map_entry.value)?
+				}
+			}
+		}
+
+		// TODO: Implement TargetHint
+		Some(value.start.byte_offset..value.end.byte_offset)
+	}
+
+	pub fn is_object(&self) -> bool {
+		matches!(self.value, Value::Object(..))
+	}
+
+	pub fn is_array(&self) -> bool {
+		matches!(self.value, Value::Array(..))
+	}
+
+	pub fn as_object(&self) -> Option<&IndexMap<String, MapEntry>> {
+		match &self.value {
+			Value::Object(index_map) => Some(index_map),
+			_ => None,
+		}
+	}
+
+	pub fn as_array(&self) -> Option<&Vec<ValuePos>> {
+		match &self.value {
+			Value::Array(array) => Some(array),
+			_ => None,
 		}
 	}
 }
@@ -342,6 +384,54 @@ impl<'de> DeserializeSeed<'de> for ValuePosDeserializer<'de> {
 			cur_pos: self.cur_pos,
 		})
 	}
+}
+
+pub enum PathPart {
+	Object(String),
+	Array(usize),
+}
+
+/// Path to reference value (or key) relative to other json value.
+///
+/// [`JsonPath`] is meant to be fast when prepending (adding parents).
+/// A more general path implementation might be created in the future.
+#[derive(Default)]
+pub struct JsonPath(Vec<PathPart>);
+
+impl JsonPath {
+	pub fn new() -> Self {
+		Self(Vec::new())
+	}
+
+	pub fn prepend(&mut self, part: PathPart) {
+		self.0.push(part);
+	}
+}
+
+impl std::fmt::Debug for JsonPath {
+	fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
+		write!(fmt, "JsonPath(\"")?;
+		for part in self.0.iter().rev() {
+			match part {
+				PathPart::Object(key) => write!(fmt, ".{key}")?,
+				PathPart::Array(index) => write!(fmt, "[{index}]")?,
+			}
+		}
+		writeln!(fmt, "\")")
+	}
+}
+
+/// Hint to determine which part of a target is actually the target of a path.
+///
+/// The hint is used to determine if paths ending in a [`PathPart::Object`]
+/// target the value, key or both. If the path ends in [`PathPart::Array`],
+/// the hint is ignored.
+#[derive(Debug, Default, Clone, Copy)]
+pub enum TargetHint {
+	#[default]
+	Value,
+	Key,
+	KeyAndValue,
 }
 
 struct LineColReader<'a, T: Read> {

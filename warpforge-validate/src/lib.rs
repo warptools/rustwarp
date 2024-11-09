@@ -4,6 +4,8 @@ use std::{
 	ops::Range,
 };
 
+use json_with_position::{JsonPath, PathPart, TargetHint};
+use oci_client::Reference;
 use warpforge_api::formula::FormulaAndContext;
 use warpforge_terminal::{debug, warn};
 
@@ -17,7 +19,8 @@ pub fn validate_formula(formula: &str) -> Result<ValidatedFormula> {
 	// `from_str` or `from_slice` on it. See [issue #160]."
 	// [issue #160]: https://github.com/serde-rs/json/issues/160
 
-	let validator = Validator::parse_json_value(formula)?;
+	let mut validator = Validator::parse_json_value(formula)?;
+	validator.validate_formula()?;
 	validator.finish_formula()
 }
 
@@ -136,8 +139,8 @@ impl<'a> Validator<'a> {
 	fn finish_error<T>(mut self, deserialize_err: Option<serde_json::Error>) -> Result<T> {
 		// Parse again with serde_json::from_slice to get line and column in error.
 		// serde_json::from_value populates line and column with 0.
-		let source = (self.modified_json.as_deref()).unwrap_or(self.json.as_bytes());
-		let parse_result = serde_json::from_slice::<FormulaAndContext>(source);
+		let json = (self.modified_json.as_deref()).unwrap_or(self.json.as_bytes());
+		let parse_result = serde_json::from_slice::<FormulaAndContext>(json);
 		match (parse_result, deserialize_err) {
 			(Err(err), _) => {
 				self.errors.push(ValidationError::Serde(err));
@@ -152,6 +155,85 @@ impl<'a> Validator<'a> {
 		Err(Error::Invalid {
 			errors: self.errors,
 		})
+	}
+
+	fn validate_formula(&mut self) -> Result<()> {
+		let errors = self.check_formula(&self.parsed, false);
+		if errors.is_empty() {
+			return Ok(());
+		}
+
+		let json = (self.modified_json.as_deref()).unwrap_or(self.json.as_bytes());
+		let Ok(positions) = json_with_position::from_slice(json) else {
+			debug!("failed to get position of some errors");
+			self.errors
+				.extend(errors.into_iter().map(|path_err| path_err.inner));
+			return Ok(());
+		};
+
+		for mut error in errors {
+			let Some(span) = positions.find_span(&error.path, error.target) else {
+				continue;
+			};
+			error.inner.try_set_span(span);
+			self.errors.push(error.inner);
+		}
+
+		Ok(())
+	}
+
+	fn check_formula(&self, value: &serde_json::Value, protoformula: bool) -> Vec<PathError> {
+		expect_key(value, "formula", |value| {
+			expect_key(value, "formula.v1", |value| {
+				let mut errors = expect_key(value, "inputs", |value| {
+					self.check_formula_inputs(value, protoformula)
+				});
+				errors.append(&mut expect_key(value, "action", |value| {
+					Vec::with_capacity(0) // TODO
+				}));
+				errors.append(&mut expect_key(value, "outputs", |value| {
+					Vec::with_capacity(0) // TODO
+				}));
+
+				errors
+			})
+		})
+	}
+
+	fn check_formula_inputs(
+		&self,
+		value: &serde_json::Value,
+		protoformula: bool,
+	) -> Vec<PathError> {
+		expect_key(value, "/", |value| {
+			expect_string(value, |value| {
+				let Some(oci) = value.strip_prefix("oci:") else {
+					return PathError::custom(
+						"formula input '/' currently has to be of type 'oci'",
+					);
+				};
+
+				let reference = match oci.parse::<Reference>() {
+					Ok(reference) => reference,
+					Err(err) => {
+						return PathError::custom(format!("failed to parse oci reference: {err}"));
+					}
+				};
+
+				if !protoformula && reference.digest().is_none() {
+					return PathError::build(
+						"formula inputs of type 'oci' are required to contain digest",
+					)
+					.with_label("invalid oci reference")
+					.with_note("use '@' to add a digest: \"oci:docker.io/library/busybox@sha256:<DIGEST>\"")
+					.finish();
+				}
+
+				Vec::with_capacity(0)
+			})
+		})
+
+		// TODO: Add more checks here.
 	}
 }
 
@@ -181,6 +263,84 @@ fn err_is_trailing_comma(err: &serde_json::Error) -> bool {
 	err.is_syntax() && format!("{err}").starts_with("trailing comma")
 }
 
+fn expect_key<'a>(
+	value: &'a serde_json::Value,
+	key: &str,
+	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<PathError>,
+) -> Vec<PathError> {
+	let Some(target) = value.as_object().and_then(|object| object.get(key)) else {
+		return PathError::custom(format!("missing field '{key}'"));
+	};
+
+	let mut errors = inspect(target);
+	for error in &mut errors {
+		error.path.prepend(PathPart::Object(key.to_owned()));
+	}
+	errors
+}
+
+fn expect_index<'a>(
+	value: &'a serde_json::Value,
+	index: usize,
+	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<PathError>,
+) -> Vec<PathError> {
+	let Some(target) = value.as_array().and_then(|vec| vec.get(index)) else {
+		return PathError::custom(format!("missing entry at index '{index}'"));
+	};
+
+	let mut errors = inspect(target);
+	for error in &mut errors {
+		error.path.prepend(PathPart::Array(index));
+	}
+	errors
+}
+
+fn expect_object_iterate<'a>(
+	value: &'a serde_json::Value,
+	mut inspect: impl FnMut((&'a String, &'a serde_json::Value)) -> Vec<PathError>,
+) -> Vec<PathError> {
+	let Some(object) = value.as_object() else {
+		return PathError::custom("expected object");
+	};
+
+	let mut errors = Vec::with_capacity(0);
+	for entry in object {
+		for mut error in inspect(entry) {
+			error.path.prepend(PathPart::Object(entry.0.to_owned()));
+			errors.push(error);
+		}
+	}
+	errors
+}
+
+fn expect_array_iterate<'a>(
+	value: &'a serde_json::Value,
+	mut inspect: impl FnMut(&'a serde_json::Value) -> Vec<PathError>,
+) -> Vec<PathError> {
+	let Some(array) = value.as_array() else {
+		return PathError::custom("expected array");
+	};
+
+	let mut errors = Vec::with_capacity(0);
+	for (index, entry) in array.iter().enumerate() {
+		for mut error in inspect(entry) {
+			error.path.prepend(PathPart::Array(index));
+			errors.push(error);
+		}
+	}
+	errors
+}
+
+fn expect_string<'a>(
+	value: &'a serde_json::Value,
+	inspect: impl FnOnce(&'a str) -> Vec<PathError>,
+) -> Vec<PathError> {
+	let Some(string) = value.as_str() else {
+		return PathError::custom("expected string");
+	};
+	inspect(string)
+}
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(thiserror::Error, Debug)]
@@ -204,10 +364,12 @@ pub struct TrailingComma {
 	pub serde_error: serde_json::Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct CustomError {
 	pub span: Range<usize>,
 	pub message: String,
+	pub note: String,
+	pub label: String,
 }
 
 impl ValidationError {
@@ -217,13 +379,38 @@ impl ValidationError {
 
 	pub fn span(&self, source: &str) -> Option<Range<usize>> {
 		match self {
-			ValidationError::Serde(error) => {
-				find_byte_offset(source.as_bytes(), error.line(), error.column())
+			ValidationError::Serde(err) => {
+				find_byte_offset(source.as_bytes(), err.line(), err.column())
 					.map(|offset| offset..offset)
 			}
-			ValidationError::TrailingComma(error) => Some(error.span.clone()),
-			ValidationError::Custom(error) => Some(error.span.clone()),
+			ValidationError::TrailingComma(err) => Some(err.span.clone()),
+			ValidationError::Custom(err) => Some(err.span.clone()),
 		}
+	}
+
+	pub fn label(&self) -> Option<&str> {
+		match self {
+			ValidationError::Custom(err) if !err.label.is_empty() => Some(&err.label),
+			_ => None,
+		}
+	}
+
+	pub fn note(&self) -> Option<&str> {
+		match self {
+			ValidationError::Custom(err) if !err.note.is_empty() => Some(&err.note),
+			_ => None,
+		}
+	}
+
+	pub fn try_set_span(&mut self, span: Range<usize>) -> bool {
+		match self {
+			ValidationError::Serde(..) => {
+				return false;
+			}
+			ValidationError::TrailingComma(err) => err.span = span,
+			ValidationError::Custom(err) => err.span = span,
+		}
+		true
 	}
 }
 
@@ -236,5 +423,67 @@ impl Display for ValidationError {
 			}
 			ValidationError::Custom(custom_error) => write!(fmt, "{}", custom_error.message),
 		}
+	}
+}
+
+struct PathError {
+	path: JsonPath,
+	target: TargetHint,
+	inner: ValidationError,
+}
+
+impl PathError {
+	fn from_error(error: ValidationError) -> Vec<Self> {
+		vec![Self {
+			path: JsonPath::new(),
+			target: TargetHint::Value,
+			inner: error,
+		}]
+	}
+
+	fn build(message: impl Into<String>) -> PathErrorBuilder {
+		PathErrorBuilder {
+			error: CustomError {
+				message: message.into(),
+				note: String::with_capacity(0),
+				label: String::with_capacity(0),
+				..Default::default()
+			},
+			target: TargetHint::Value,
+		}
+	}
+
+	fn custom(message: impl Into<String>) -> Vec<Self> {
+		Self::build(message).finish()
+	}
+}
+
+struct PathErrorBuilder {
+	error: CustomError,
+	target: TargetHint,
+}
+
+impl PathErrorBuilder {
+	fn with_target(mut self, target: TargetHint) -> Self {
+		self.target = target;
+		self
+	}
+
+	fn with_note(mut self, note: impl Into<String>) -> Self {
+		self.error.note = note.into();
+		self
+	}
+
+	fn with_label(mut self, label: impl Into<String>) -> Self {
+		self.error.label = label.into();
+		self
+	}
+
+	fn finish(self) -> Vec<PathError> {
+		vec![PathError {
+			path: JsonPath::new(),
+			target: self.target,
+			inner: ValidationError::Custom(self.error),
+		}]
 	}
 }
