@@ -6,7 +6,7 @@ use std::{
 
 use json_with_position::{JsonPath, PathPart, TargetHint};
 use oci_client::Reference;
-use warpforge_api::formula::FormulaAndContext;
+use warpforge_api::formula::{FormulaAndContext, FormulaInput};
 use warpforge_terminal::{debug, warn};
 
 /// Maximal number of trailing comma errors that we include in validation result.
@@ -205,7 +205,7 @@ impl<'a> Validator<'a> {
 		value: &serde_json::Value,
 		protoformula: bool,
 	) -> Vec<PathError> {
-		expect_key(value, "/", |value| {
+		let mut errors = expect_key(value, "/", |value| {
 			expect_string(value, |value| {
 				let Some(oci) = value.strip_prefix("oci:") else {
 					return PathError::custom(
@@ -231,9 +231,79 @@ impl<'a> Validator<'a> {
 
 				Vec::with_capacity(0)
 			})
-		})
+		});
 
-		// TODO: Add more checks here.
+		errors.extend(expect_object_iterate(value, |(key, value)| {
+			if key == "/" {
+				return Vec::with_capacity(0);
+			}
+
+			let allowed_types =
+				match key.get(..1) {
+					Some("/") => &["mount", "ware"][..],
+					Some("$") => &["literal"][..],
+					_ => {
+						return PathError::build("input port should start with '/' or '$'")
+						.with_target(TargetHint::Key)
+						.with_label("invalid port")
+						.with_note("use '/some/path' to mount an input or '$VAR' to set an env variable.")
+						.finish();
+					}
+				};
+
+			expect_string(value, |value| {
+				let mut value = value.split(':');
+				let Some(discriminant) = value.next() else {
+					return PathError::build("input should be ':' separated value")
+						.with_label("invalid formula input")
+						.with_note("example input: \"$MSG\": \"literal:Hello, World!\"")
+						.finish();
+				};
+
+				if !allowed_types.contains(&discriminant) {
+					let message = format!(
+						"input type not allowed (allowed types: '{}')",
+						allowed_types.join("', '")
+					);
+					return PathError::build(message)
+						.with_label("invalid formula input")
+						.finish();
+				}
+
+				match discriminant {
+					"literal" => {} // No additional checks.
+					"mount" => {
+						let Some((mount_type, _host_path)) =
+							value.next().and_then(|m| value.next().map(|o| (m, o)))
+						else {
+							return PathError::build(
+								"input type 'mount' requires mount type and host path",
+							)
+							.with_label("invalid mount")
+							.with_note("example mount: \"/guest/path\": \"mount:ro:/host/path\"")
+							.finish();
+						};
+
+						if !["ro", "rw", "overlay"].contains(&mount_type) {
+							return PathError::build(
+								"mount type not allowed (allowed types: 'ro', 'rw', 'overlay')",
+							)
+							.with_label("mount with invalid mount type")
+							.with_note("example mount: \"/guest/path\": \"mount:ro:/host/path\"")
+							.finish();
+						}
+					}
+					"ware" => {
+						todo!();
+					}
+					_ => {}
+				}
+
+				Vec::with_capacity(0)
+			})
+		}));
+
+		errors
 	}
 }
 
@@ -263,6 +333,7 @@ fn err_is_trailing_comma(err: &serde_json::Error) -> bool {
 	err.is_syntax() && format!("{err}").starts_with("trailing comma")
 }
 
+#[must_use]
 fn expect_key<'a>(
 	value: &'a serde_json::Value,
 	key: &str,
@@ -279,6 +350,7 @@ fn expect_key<'a>(
 	errors
 }
 
+#[must_use]
 fn expect_index<'a>(
 	value: &'a serde_json::Value,
 	index: usize,
@@ -295,6 +367,7 @@ fn expect_index<'a>(
 	errors
 }
 
+#[must_use]
 fn expect_object_iterate<'a>(
 	value: &'a serde_json::Value,
 	mut inspect: impl FnMut((&'a String, &'a serde_json::Value)) -> Vec<PathError>,
@@ -313,6 +386,7 @@ fn expect_object_iterate<'a>(
 	errors
 }
 
+#[must_use]
 fn expect_array_iterate<'a>(
 	value: &'a serde_json::Value,
 	mut inspect: impl FnMut(&'a serde_json::Value) -> Vec<PathError>,
@@ -331,6 +405,7 @@ fn expect_array_iterate<'a>(
 	errors
 }
 
+#[must_use]
 fn expect_string<'a>(
 	value: &'a serde_json::Value,
 	inspect: impl FnOnce(&'a str) -> Vec<PathError>,
