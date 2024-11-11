@@ -171,23 +171,30 @@ impl ValuePos {
 	}
 
 	/// Tries to find byte span which is referenced by the given path.
-	pub fn find_span(&self, path: &JsonPath, _target: TargetHint) -> Option<Range<usize>> {
+	pub fn find_span(&self, path: &JsonPath, target: TargetHint) -> Option<Range<usize>> {
 		let mut value = self;
+		let mut map_entry = None;
 		for part in path.0.iter().rev() {
 			match part {
 				PathPart::Array(index) => {
-					value = value.as_array().and_then(|array| array.get(*index))?
+					value = value.as_array().and_then(|array| array.get(*index))?;
+					map_entry = None;
 				}
 				PathPart::Object(key) => {
-					value = (value.as_object())
+					(value, map_entry) = (value.as_object())
 						.and_then(|object| object.get(key))
-						.map(|map_entry| &map_entry.value)?
+						.map(|map_entry| (&map_entry.value, Some(map_entry)))?
 				}
 			}
 		}
 
-		// TODO: Implement TargetHint
-		Some(value.start.byte_offset..value.end.byte_offset)
+		let (start, end) = match target {
+			TargetHint::Value => Some((&value.start, &value.end)),
+			TargetHint::Key => map_entry.map(|entry| (&entry.key_start, &entry.key_end)),
+			TargetHint::KeyAndValue => map_entry.map(|entry| (&entry.key_start, &entry.value.end)),
+		}?;
+
+		Some(start.byte_offset..end.byte_offset)
 	}
 
 	pub fn is_object(&self) -> bool {
