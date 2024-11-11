@@ -1,0 +1,9 @@
+[package]
+name = "warpforge-depot"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+warpforge-api = { path = "../warpforge-api" }
+
+pathrs.workspace = true

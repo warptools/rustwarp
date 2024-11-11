@@ -9,6 +9,7 @@ members = [
     "warpforge-api",
     "warpforge-cli",
     "warpforge-cfg",
+    "warpforge-depot",
     "warpforge-executors",
     "warpforge-terminal",
     "warpforge-validate",
@@ -33,3 +34,4 @@ rand = "*"
 oci-client = "*"
 tar = "*"
 flate2 = "*"
+pathrs = "*"
