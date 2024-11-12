@@ -182,7 +182,11 @@ impl<'a> Validator<'a> {
 		Ok(())
 	}
 
-	fn check_formula(&self, value: &serde_json::Value, protoformula: bool) -> Vec<PathError> {
+	fn check_formula(
+		&self,
+		value: &serde_json::Value,
+		protoformula: bool,
+	) -> Vec<ValidationErrorWithPath> {
 		expect_key(value, "formula", |value| {
 			expect_key(value, "formula.v1", |value| {
 				let mut errors = expect_key(value, "inputs", |value| {
@@ -204,11 +208,11 @@ impl<'a> Validator<'a> {
 		&self,
 		value: &serde_json::Value,
 		protoformula: bool,
-	) -> Vec<PathError> {
+	) -> Vec<ValidationErrorWithPath> {
 		let mut errors = expect_key(value, "/", |value| {
 			expect_string(value, |value| {
 				let Some(oci) = value.strip_prefix("oci:") else {
-					return PathError::custom(
+					return ValidationErrorWithPath::custom(
 						"formula input '/' currently has to be of type 'oci'",
 					);
 				};
@@ -216,12 +220,14 @@ impl<'a> Validator<'a> {
 				let reference = match oci.parse::<Reference>() {
 					Ok(reference) => reference,
 					Err(err) => {
-						return PathError::custom(format!("failed to parse oci reference: {err}"));
+						return ValidationErrorWithPath::custom(format!(
+							"failed to parse oci reference: {err}"
+						));
 					}
 				};
 
 				if !protoformula && reference.digest().is_none() {
-					return PathError::build(
+					return ValidationErrorWithPath::build(
 						"formula inputs of type 'oci' are required to contain digest",
 					)
 					.with_label("invalid oci reference")
@@ -238,23 +244,26 @@ impl<'a> Validator<'a> {
 				return Vec::with_capacity(0);
 			}
 
-			let allowed_types =
-				match key.get(..1) {
-					Some("/") => &["mount", "ware"][..],
-					Some("$") => &["literal"][..],
-					_ => {
-						return PathError::build("input port should start with '/' or '$'")
-						.with_target(TargetHint::Key)
-						.with_label("invalid port")
-						.with_note("use '/some/path' to mount an input or '$VAR' to set an env variable.")
-						.finish();
-					}
-				};
+			let allowed_types = match key.get(..1) {
+				Some("/") => &["mount", "ware"][..],
+				Some("$") => &["literal"][..],
+				_ => {
+					return ValidationErrorWithPath::build(
+						"input port should start with '/' or '$'",
+					)
+					.with_target(TargetHint::Key)
+					.with_label("invalid port")
+					.with_note(
+						"use '/some/path' to mount an input or '$VAR' to set an env variable.",
+					)
+					.finish();
+				}
+			};
 
 			expect_string(value, |value| {
 				let mut value = value.split(':');
 				let Some(discriminant) = value.next() else {
-					return PathError::build("input should be ':' separated value")
+					return ValidationErrorWithPath::build("input should be ':' separated value")
 						.with_label("invalid formula input")
 						.with_note("example input: \"$MSG\": \"literal:Hello, World!\"")
 						.finish();
@@ -265,7 +274,7 @@ impl<'a> Validator<'a> {
 						"input type not allowed (allowed types: '{}')",
 						allowed_types.join("', '")
 					);
-					return PathError::build(message)
+					return ValidationErrorWithPath::build(message)
 						.with_label("invalid formula input")
 						.finish();
 				}
@@ -276,7 +285,7 @@ impl<'a> Validator<'a> {
 						let Some((mount_type, _host_path)) =
 							value.next().and_then(|m| value.next().map(|o| (m, o)))
 						else {
-							return PathError::build(
+							return ValidationErrorWithPath::build(
 								"input type 'mount' requires mount type and host path",
 							)
 							.with_label("invalid mount")
@@ -285,7 +294,7 @@ impl<'a> Validator<'a> {
 						};
 
 						if !["ro", "rw", "overlay"].contains(&mount_type) {
-							return PathError::build(
+							return ValidationErrorWithPath::build(
 								"mount type not allowed (allowed types: 'ro', 'rw', 'overlay')",
 							)
 							.with_label("mount with invalid mount type")
@@ -337,10 +346,10 @@ fn err_is_trailing_comma(err: &serde_json::Error) -> bool {
 fn expect_key<'a>(
 	value: &'a serde_json::Value,
 	key: &str,
-	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<PathError>,
-) -> Vec<PathError> {
+	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<ValidationErrorWithPath>,
+) -> Vec<ValidationErrorWithPath> {
 	let Some(target) = value.as_object().and_then(|object| object.get(key)) else {
-		return PathError::custom(format!("missing field '{key}'"));
+		return ValidationErrorWithPath::custom(format!("missing field '{key}'"));
 	};
 
 	let mut errors = inspect(target);
@@ -354,10 +363,10 @@ fn expect_key<'a>(
 fn expect_index<'a>(
 	value: &'a serde_json::Value,
 	index: usize,
-	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<PathError>,
-) -> Vec<PathError> {
+	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<ValidationErrorWithPath>,
+) -> Vec<ValidationErrorWithPath> {
 	let Some(target) = value.as_array().and_then(|vec| vec.get(index)) else {
-		return PathError::custom(format!("missing entry at index '{index}'"));
+		return ValidationErrorWithPath::custom(format!("missing entry at index '{index}'"));
 	};
 
 	let mut errors = inspect(target);
@@ -370,10 +379,10 @@ fn expect_index<'a>(
 #[must_use]
 fn expect_object_iterate<'a>(
 	value: &'a serde_json::Value,
-	mut inspect: impl FnMut((&'a String, &'a serde_json::Value)) -> Vec<PathError>,
-) -> Vec<PathError> {
+	mut inspect: impl FnMut((&'a String, &'a serde_json::Value)) -> Vec<ValidationErrorWithPath>,
+) -> Vec<ValidationErrorWithPath> {
 	let Some(object) = value.as_object() else {
-		return PathError::custom("expected object");
+		return ValidationErrorWithPath::custom("expected object");
 	};
 
 	let mut errors = Vec::with_capacity(0);
@@ -389,10 +398,10 @@ fn expect_object_iterate<'a>(
 #[must_use]
 fn expect_array_iterate<'a>(
 	value: &'a serde_json::Value,
-	mut inspect: impl FnMut(&'a serde_json::Value) -> Vec<PathError>,
-) -> Vec<PathError> {
+	mut inspect: impl FnMut(&'a serde_json::Value) -> Vec<ValidationErrorWithPath>,
+) -> Vec<ValidationErrorWithPath> {
 	let Some(array) = value.as_array() else {
-		return PathError::custom("expected array");
+		return ValidationErrorWithPath::custom("expected array");
 	};
 
 	let mut errors = Vec::with_capacity(0);
@@ -408,19 +417,18 @@ fn expect_array_iterate<'a>(
 #[must_use]
 fn expect_string<'a>(
 	value: &'a serde_json::Value,
-	inspect: impl FnOnce(&'a str) -> Vec<PathError>,
-) -> Vec<PathError> {
+	inspect: impl FnOnce(&'a str) -> Vec<ValidationErrorWithPath>,
+) -> Vec<ValidationErrorWithPath> {
 	let Some(string) = value.as_str() else {
-		return PathError::custom("expected string");
+		return ValidationErrorWithPath::custom("expected string");
 	};
 	inspect(string)
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Debug)]
 pub enum Error {
-	#[error("failed validation")]
 	Invalid { errors: Vec<ValidationError> },
 }
 
@@ -489,25 +497,36 @@ impl ValidationError {
 	}
 }
 
+impl Display for Error {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		write!(f, "failed validation with error(s):")?;
+		let Error::Invalid { errors } = self;
+		for err in errors {
+			write!(f, "\n  - {err}")?;
+		}
+		Ok(())
+	}
+}
+
 impl Display for ValidationError {
-	fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
 		match self {
-			ValidationError::Serde(err) => write!(fmt, "{err}"),
+			ValidationError::Serde(err) => write!(f, "{err}"),
 			ValidationError::TrailingComma(trailing_comma) => {
-				write!(fmt, "{}", trailing_comma.serde_error)
+				write!(f, "{}", trailing_comma.serde_error)
 			}
-			ValidationError::Custom(custom_error) => write!(fmt, "{}", custom_error.message),
+			ValidationError::Custom(custom_error) => write!(f, "{}", custom_error.message),
 		}
 	}
 }
 
-struct PathError {
+struct ValidationErrorWithPath {
 	path: JsonPath,
 	target: TargetHint,
 	inner: ValidationError,
 }
 
-impl PathError {
+impl ValidationErrorWithPath {
 	fn from_error(error: ValidationError) -> Vec<Self> {
 		vec![Self {
 			path: JsonPath::new(),
@@ -554,8 +573,8 @@ impl PathErrorBuilder {
 		self
 	}
 
-	fn finish(self) -> Vec<PathError> {
-		vec![PathError {
+	fn finish(self) -> Vec<ValidationErrorWithPath> {
+		vec![ValidationErrorWithPath {
 			path: JsonPath::new(),
 			target: self.target,
 			inner: ValidationError::Custom(self.error),
