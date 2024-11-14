@@ -262,12 +262,7 @@ impl<'a> Validator<'a> {
 
 			expect_string(value, |value| {
 				let mut value = value.split(':');
-				let Some(discriminant) = value.next() else {
-					return ValidationErrorWithPath::build("input should be ':' separated value")
-						.with_label("invalid formula input")
-						.with_note("example input: \"$MSG\": \"literal:Hello, World!\"")
-						.finish();
-				};
+				let discriminant = value.next().expect("split emits at least one value");
 
 				if !allowed_types.contains(&discriminant) {
 					let message = format!(
@@ -280,10 +275,18 @@ impl<'a> Validator<'a> {
 				}
 
 				match discriminant {
-					"literal" => {} // No additional checks.
+					"literal" => {
+						if value.next().is_none() {
+							return ValidationErrorWithPath::build(
+								"input type 'literal' requires value",
+							)
+							.with_label("invalid literal")
+							.with_note("example input: \"$MSG\": \"literal:Hello, World!\"")
+							.finish();
+						}
+					}
 					"mount" => {
-						let Some((mount_type, _host_path)) =
-							value.next().and_then(|m| value.next().map(|o| (m, o)))
+						let (Some(mount_type), Some(_host_path)) = (value.next(), value.next())
 						else {
 							return ValidationErrorWithPath::build(
 								"input type 'mount' requires mount type and host path",

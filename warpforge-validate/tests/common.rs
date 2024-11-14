@@ -1,6 +1,12 @@
 use std::{collections::HashMap, ops::Range};
 
-use warpforge_validate::{Error, Result};
+use warpforge_validate::{validate_formula, Error, Result, ValidationError};
+
+pub fn check_formula(input: &str) {
+	let (json, locations) = prepare_input(input);
+	let result = validate_formula(&json);
+	check_validation_locations(&result, &json, &locations);
+}
 
 #[derive(Debug)]
 enum InputToken<'a> {
@@ -11,7 +17,7 @@ enum InputToken<'a> {
 }
 
 #[test]
-fn test_prepare_input() {
+fn prepare_input_doctest() {
 	// Doc-tests of integration tests are not run, so we added them as their own test.
 	let input = "hello <tag>world <3</tag>";
 	let (stripped, locations) = prepare_input(input);
@@ -24,6 +30,9 @@ fn test_prepare_input() {
 /// With this function we attempt to make test more readable and maintainable.
 /// Instead of having to hardcode locations into the code we mark the locations with
 /// tags and let [`prepare_input`] strip the tags and find the corresponding locations.
+///
+/// Note: The tag id does not matter, just make sure start and end tag ids match.
+/// We just check the locations of the erros and not concrete error messages or types.
 ///
 /// # Examples
 ///
@@ -91,7 +100,7 @@ fn parse_input(mut input: &str) -> Vec<InputToken<'_>> {
 		if is_end {
 			tag = &tag[1..];
 		}
-		if tag.chars().any(|c| !c.is_ascii_alphanumeric()) {
+		if tag.chars().any(|c| !c.is_ascii_alphanumeric() && c != '_') {
 			let (left, right) = input.split_at(start + 1);
 			parsed.push(InputToken::Slice(left));
 			input = right;
@@ -130,6 +139,15 @@ pub fn check_validation_locations<T>(
 		panic!("expected {} validation errors", byte_locations.len());
 	};
 	eprintln!("actual errors: {err}\n");
+
+	// Filter out serde errors, that are not syntax errors.
+	// We already report custom errors for those.
+	let errors = (errors.iter())
+		.filter(|err| match err {
+			ValidationError::Serde(serde) => !serde.is_data(),
+			_ => true,
+		})
+		.collect::<Vec<_>>();
 
 	let msg = "number of actual errors == number of expected errors";
 	assert_eq!(errors.len(), byte_locations.len(), "{msg}");
