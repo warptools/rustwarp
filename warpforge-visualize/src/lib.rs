@@ -317,9 +317,7 @@ fn package_name(input: &PlotInput) -> Option<&str> {
 	let PlotInput::CatalogRef(catalog) = input else {
 		return None;
 	};
-	let Some(mut url) = catalog.module_name.0.strip_prefix(WARPSYS_CATALOG_DOMAIN) else {
-		return None;
-	};
+	let mut url = catalog.module_name.0.strip_prefix(WARPSYS_CATALOG_DOMAIN)?;
 	while let Some(stripped) = url.strip_prefix('/') {
 		url = stripped;
 	}
