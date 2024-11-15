@@ -6,7 +6,7 @@ use std::{
 
 use json_with_position::{JsonPath, PathPart, TargetHint};
 use oci_client::Reference;
-use warpforge_api::formula::{FormulaAndContext, FormulaInput};
+use warpforge_api::formula::FormulaAndContext;
 use warpforge_terminal::{debug, warn};
 
 /// Maximal number of trailing comma errors that we include in validation result.
@@ -143,7 +143,11 @@ impl<'a> Validator<'a> {
 		let parse_result = serde_json::from_slice::<FormulaAndContext>(json);
 		match (parse_result, deserialize_err) {
 			(Err(err), _) => {
-				self.errors.push(ValidationError::Serde(err));
+				if self.errors.is_empty() {
+					// We assume here that the reported errors cover the error found by serde.
+					// Note: When finding syntax errors other than trailing comma we exit early.
+					self.errors.push(ValidationError::Serde(err));
+				}
 			}
 			(Ok(_), None) => {}
 			(Ok(_), Some(err)) => {
@@ -192,10 +196,10 @@ impl<'a> Validator<'a> {
 				let mut errors = expect_key(value, "inputs", |value| {
 					self.check_formula_inputs(value, protoformula)
 				});
-				errors.append(&mut expect_key(value, "action", |value| {
-					Vec::with_capacity(0) // TODO
+				errors.extend(expect_key(value, "action", |value| {
+					self.check_formula_action(value)
 				}));
-				errors.append(&mut expect_key(value, "outputs", |value| {
+				errors.extend(expect_key(value, "outputs", |value| {
 					Vec::with_capacity(0) // TODO
 				}));
 
@@ -261,59 +265,112 @@ impl<'a> Validator<'a> {
 			};
 
 			expect_string(value, |value| {
-				let mut value = value.split(':');
-				let discriminant = value.next().expect("split emits at least one value");
-
-				if !allowed_types.contains(&discriminant) {
-					let message = format!(
-						"input type not allowed (allowed types: '{}')",
-						allowed_types.join("', '")
-					);
-					return ValidationErrorWithPath::build(message)
-						.with_label("invalid formula input")
-						.finish();
-				}
-
-				match discriminant {
-					"literal" => {
-						if value.next().is_none() {
-							return ValidationErrorWithPath::build(
-								"input type 'literal' requires value",
-							)
-							.with_label("invalid literal")
-							.with_note("example input: \"$MSG\": \"literal:Hello, World!\"")
-							.finish();
-						}
-					}
-					"mount" => {
-						let (Some(mount_type), Some(_host_path)) = (value.next(), value.next())
-						else {
-							return ValidationErrorWithPath::build(
-								"input type 'mount' requires mount type and host path",
-							)
-							.with_label("invalid mount")
-							.with_note("example mount: \"/guest/path\": \"mount:ro:/host/path\"")
-							.finish();
-						};
-
-						if !["ro", "rw", "overlay"].contains(&mount_type) {
-							return ValidationErrorWithPath::build(
-								"mount type not allowed (allowed types: 'ro', 'rw', 'overlay')",
-							)
-							.with_label("mount with invalid mount type")
-							.with_note("example mount: \"/guest/path\": \"mount:ro:/host/path\"")
-							.finish();
-						}
-					}
-					"ware" => {
-						todo!();
-					}
-					_ => {}
-				}
-
-				Vec::with_capacity(0)
+				self.check_formula_input_value(value, allowed_types)
 			})
 		}));
+
+		errors
+	}
+
+	fn check_formula_input_value(
+		&self,
+		value: &str,
+		allowed_types: &[&str],
+	) -> Vec<ValidationErrorWithPath> {
+		let mut value = value.split(':');
+		let discriminant = value.next().expect("split emits at least one value");
+
+		if !allowed_types.contains(&discriminant) {
+			let message = format!(
+				"input type not allowed (allowed types: '{}')",
+				allowed_types.join("', '")
+			);
+			return ValidationErrorWithPath::build(message)
+				.with_label("invalid formula input")
+				.finish();
+		}
+
+		match discriminant {
+			"literal" => {
+				if value.next().is_none() {
+					return ValidationErrorWithPath::build("input type 'literal' requires value")
+						.with_label("invalid literal")
+						.with_note("example input: \"$MSG\": \"literal:Hello, World!\"")
+						.finish();
+				}
+			}
+			"mount" => {
+				let (Some(mount_type), Some(_host_path)) = (value.next(), value.next()) else {
+					return ValidationErrorWithPath::build(
+						"input type 'mount' requires mount type and host path",
+					)
+					.with_label("invalid mount")
+					.with_note("example mount: \"/guest/path\": \"mount:ro:/host/path\"")
+					.finish();
+				};
+
+				if !["ro", "rw", "overlay"].contains(&mount_type) {
+					return ValidationErrorWithPath::build(
+						"mount type not allowed (allowed types: 'ro', 'rw', 'overlay')",
+					)
+					.with_label("mount with invalid mount type")
+					.with_note("example mount: \"/guest/path\": \"mount:ro:/host/path\"")
+					.finish();
+				}
+			}
+			"ware" => {
+				todo!();
+			}
+			_ => {}
+		}
+
+		Vec::with_capacity(0)
+	}
+
+	fn check_formula_action(&self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+		if let Some("echo") = value.as_str() {
+			return Vec::with_capacity(0);
+		}
+
+		let mut errors = expect_object_iterate(value, |(key, value)| match key.as_str() {
+			"exec" => expect_key(value, "command", |value| {
+				expect_array_iterate(value, |value| expect_string(value, accept_any))
+			}),
+			"script" => {
+				let mut errors = expect_key(value, "interpreter", |value| {
+					expect_string(value, |value| {
+						if !value.starts_with("/") {
+							ValidationErrorWithPath::custom("interpreter has to be absolute path")
+						} else {
+							Vec::with_capacity(0)
+						}
+					})
+				});
+
+				errors.extend(expect_key(value, "contents", |value| {
+					expect_array_iterate(value, |value| expect_string(value, accept_any))
+				}));
+
+				errors
+			}
+			_invalid_action => {
+				ValidationErrorWithPath::build("invalid action (allowed actions: 'exec', 'script')")
+					.with_target(TargetHint::Key)
+					.finish()
+			}
+		});
+
+		if let Some(object) = value.as_object() {
+			if object.len() != 1 {
+				errors.extend(
+					ValidationErrorWithPath::build(
+						"a formula should define one action (allowed actions: 'exec', 'script')",
+					)
+					.with_note("example action: \"action\": { \"exec\": { \"command\": [\"echo\", \"hello, warpforge\"] } }")
+					.finish(),
+				);
+			}
+		}
 
 		errors
 	}
@@ -399,6 +456,14 @@ fn expect_object_iterate<'a>(
 }
 
 #[must_use]
+fn expect_array(value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+	if value.is_array() {
+		return Vec::with_capacity(0);
+	}
+	ValidationErrorWithPath::custom("expected array")
+}
+
+#[must_use]
 fn expect_array_iterate<'a>(
 	value: &'a serde_json::Value,
 	mut inspect: impl FnMut(&'a serde_json::Value) -> Vec<ValidationErrorWithPath>,
@@ -426,6 +491,11 @@ fn expect_string<'a>(
 		return ValidationErrorWithPath::custom("expected string");
 	};
 	inspect(string)
+}
+
+#[must_use]
+fn accept_any<T>(_value: T) -> Vec<ValidationErrorWithPath> {
+	Vec::with_capacity(0)
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
