@@ -200,7 +200,7 @@ impl<'a> Validator<'a> {
 					self.check_formula_action(value)
 				}));
 				errors.extend(expect_key(value, "outputs", |value| {
-					Vec::with_capacity(0) // TODO
+					self.check_formula_outputs(value)
 				}));
 
 				errors
@@ -374,6 +374,31 @@ impl<'a> Validator<'a> {
 
 		errors
 	}
+
+	fn check_formula_outputs(&self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+		expect_object_iterate(value, |(_key, value)| {
+			let mut errors = expect_key(value, "from", |value| {
+				expect_string(value, |value| {
+					if !value.starts_with('/') {
+						return ValidationErrorWithPath::custom("expected an absolute path");
+					}
+					Vec::with_capacity(0)
+				})
+			});
+
+			errors.extend(optional_key(value, "packtype", |value| {
+				expect_string(value, |value| {
+					if !["none", "tgz"].contains(&value) {
+						let message = "invalid packtype (allowed values: 'none', 'tgz')";
+						return ValidationErrorWithPath::custom(message);
+					}
+					Vec::with_capacity(0)
+				})
+			}));
+
+			errors
+		})
+	}
 }
 
 fn find_byte_offset(src: &[u8], line: usize, column: usize) -> Option<usize> {
@@ -410,6 +435,27 @@ fn expect_key<'a>(
 ) -> Vec<ValidationErrorWithPath> {
 	let Some(target) = value.as_object().and_then(|object| object.get(key)) else {
 		return ValidationErrorWithPath::custom(format!("missing field '{key}'"));
+	};
+
+	let mut errors = inspect(target);
+	for error in &mut errors {
+		error.path.prepend(PathPart::Object(key.to_owned()));
+	}
+	errors
+}
+
+#[must_use]
+fn optional_key<'a>(
+	value: &'a serde_json::Value,
+	key: &str,
+	inspect: impl FnOnce(&'a serde_json::Value) -> Vec<ValidationErrorWithPath>,
+) -> Vec<ValidationErrorWithPath> {
+	let Some(object) = value.as_object() else {
+		return ValidationErrorWithPath::custom("expected object");
+	};
+
+	let Some(target) = object.get(key) else {
+		return Vec::with_capacity(0);
 	};
 
 	let mut errors = inspect(target);
