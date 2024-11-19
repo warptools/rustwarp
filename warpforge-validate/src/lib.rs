@@ -19,23 +19,28 @@ pub fn validate_formula(formula: &str) -> Result<ValidatedFormula> {
 	// `from_str` or `from_slice` on it. See [issue #160]."
 	// [issue #160]: https://github.com/serde-rs/json/issues/160
 
-	let mut validator = Validator::parse_json_value(formula)?;
-	validator.validate_formula()?;
-	validator.finish_formula()
+	let mut parser = Parser::parse_json_value(formula)?;
+	let errors = FormulaValidator::validate(&parser.parsed, false);
+	parser.append_errors(errors);
+	parser.finish_formula()
 }
 
 pub struct ValidatedFormula {
 	pub formula: FormulaAndContext,
 }
 
-struct Validator<'a> {
+struct Parser<'a> {
 	modified_json: Option<Vec<u8>>,
 	errors: Vec<ValidationError>,
 	json: &'a str,
 	parsed: serde_json::Value,
 }
 
-impl<'a> Validator<'a> {
+struct FormulaValidator {
+	protoformula: bool,
+}
+
+impl<'a> Parser<'a> {
 	fn parse_json_value(json: &'a str) -> Result<Self> {
 		let mut modified_json = None;
 
@@ -120,6 +125,28 @@ impl<'a> Validator<'a> {
 		})
 	}
 
+	fn append_errors(&mut self, errors: Vec<ValidationErrorWithPath>) {
+		if errors.is_empty() {
+			return;
+		}
+
+		let json = (self.modified_json.as_deref()).unwrap_or(self.json.as_bytes());
+		let Ok(positions) = json_with_position::from_slice(json) else {
+			debug!("failed to get position of some errors");
+			self.errors
+				.extend(errors.into_iter().map(|path_err| path_err.inner));
+			return;
+		};
+
+		for mut error in errors {
+			let Some(span) = positions.find_span(&error.path, error.target) else {
+				continue;
+			};
+			error.inner.try_set_span(span);
+			self.errors.push(error.inner);
+		}
+	}
+
 	fn finish_formula(mut self) -> Result<ValidatedFormula> {
 		let deserialize_err = if self.errors.is_empty() {
 			// Setting self.parsed to Value::default here:
@@ -160,47 +187,22 @@ impl<'a> Validator<'a> {
 			errors: self.errors,
 		})
 	}
+}
 
-	fn validate_formula(&mut self) -> Result<()> {
-		let errors = self.check_formula(&self.parsed, false);
-		if errors.is_empty() {
-			return Ok(());
-		}
-
-		let json = (self.modified_json.as_deref()).unwrap_or(self.json.as_bytes());
-		let Ok(positions) = json_with_position::from_slice(json) else {
-			debug!("failed to get position of some errors");
-			self.errors
-				.extend(errors.into_iter().map(|path_err| path_err.inner));
-			return Ok(());
-		};
-
-		for mut error in errors {
-			let Some(span) = positions.find_span(&error.path, error.target) else {
-				continue;
-			};
-			error.inner.try_set_span(span);
-			self.errors.push(error.inner);
-		}
-
-		Ok(())
+impl FormulaValidator {
+	fn validate(parsed: &serde_json::Value, protoformula: bool) -> Vec<ValidationErrorWithPath> {
+		FormulaValidator { protoformula }.check(parsed)
 	}
 
-	fn check_formula(
-		&self,
-		value: &serde_json::Value,
-		protoformula: bool,
-	) -> Vec<ValidationErrorWithPath> {
+	fn check(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		expect_key(value, "formula", |value| {
 			expect_key(value, "formula.v1", |value| {
-				let mut errors = expect_key(value, "inputs", |value| {
-					self.check_formula_inputs(value, protoformula)
-				});
+				let mut errors = expect_key(value, "inputs", |value| self.check_inputs(value));
 				errors.extend(expect_key(value, "action", |value| {
-					self.check_formula_action(value)
+					self.check_action(value)
 				}));
 				errors.extend(expect_key(value, "outputs", |value| {
-					self.check_formula_outputs(value)
+					self.check_outputs(value)
 				}));
 
 				errors
@@ -208,11 +210,7 @@ impl<'a> Validator<'a> {
 		})
 	}
 
-	fn check_formula_inputs(
-		&self,
-		value: &serde_json::Value,
-		protoformula: bool,
-	) -> Vec<ValidationErrorWithPath> {
+	fn check_inputs(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		let mut errors = expect_key(value, "/", |value| {
 			expect_string(value, |value| {
 				let Some(oci) = value.strip_prefix("oci:") else {
@@ -230,7 +228,7 @@ impl<'a> Validator<'a> {
 					}
 				};
 
-				if !protoformula && reference.digest().is_none() {
+				if !self.protoformula && reference.digest().is_none() {
 					return ValidationErrorWithPath::build(
 						"formula inputs of type 'oci' are required to contain digest",
 					)
@@ -264,16 +262,14 @@ impl<'a> Validator<'a> {
 				}
 			};
 
-			expect_string(value, |value| {
-				self.check_formula_input_value(value, allowed_types)
-			})
+			expect_string(value, |value| self.check_input_value(value, allowed_types))
 		}));
 
 		errors
 	}
 
-	fn check_formula_input_value(
-		&self,
+	fn check_input_value(
+		&mut self,
 		value: &str,
 		allowed_types: &[&str],
 	) -> Vec<ValidationErrorWithPath> {
@@ -327,7 +323,7 @@ impl<'a> Validator<'a> {
 		Vec::with_capacity(0)
 	}
 
-	fn check_formula_action(&self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+	fn check_action(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		if let Some("echo") = value.as_str() {
 			return Vec::with_capacity(0);
 		}
@@ -375,7 +371,7 @@ impl<'a> Validator<'a> {
 		errors
 	}
 
-	fn check_formula_outputs(&self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+	fn check_outputs(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		expect_object_iterate(value, |(_key, value)| {
 			let mut errors = expect_key(value, "from", |value| {
 				expect_string(value, |value| {
