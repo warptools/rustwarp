@@ -32,7 +32,8 @@ pub fn from_slice(input: &[u8]) -> serde_json::Result<ValuePos> {
 /// whitespaces, colons, and commas. This function advances all start positions
 /// and recedes all end positons to remove any leading or trailing garbage.
 fn clean_value_positions(src: &[u8], value: &mut ValuePos) {
-	clean_position(src, &mut value.start, &mut value.end);
+	let is_number = value.is_number();
+	clean_position(src, &mut value.start, &mut value.end, is_number);
 
 	match &mut value.value {
 		Value::Primitive(_) => {}
@@ -43,7 +44,7 @@ fn clean_value_positions(src: &[u8], value: &mut ValuePos) {
 		}
 		Value::Object(children) => {
 			for (_, child) in children {
-				clean_position(src, &mut child.key_start, &mut child.key_end);
+				clean_position(src, &mut child.key_start, &mut child.key_end, false);
 				clean_value_positions(src, &mut child.value);
 			}
 		}
@@ -51,7 +52,8 @@ fn clean_value_positions(src: &[u8], value: &mut ValuePos) {
 }
 
 #[inline]
-fn clean_position(src: &[u8], start: &mut Position, end: &mut Position) {
+fn clean_position(src: &[u8], start: &mut Position, end: &mut Position, is_number: bool) {
+	// Remove leading whitespace, ',', and ':'.
 	while start.byte_offset < end.byte_offset {
 		let byte = src[start.byte_offset];
 		if byte.is_ascii_whitespace() || byte == b',' || byte == b':' {
@@ -67,10 +69,18 @@ fn clean_position(src: &[u8], start: &mut Position, end: &mut Position) {
 		}
 	}
 
+	// Remove trailing whitespace, ',', and ':'.
 	let mut compute_end_column = false;
 	while start.byte_offset < end.byte_offset {
 		let byte = src[end.byte_offset - 1];
-		if byte.is_ascii_whitespace() || byte == b',' || byte == b':' {
+		let should_skip = byte.is_ascii_whitespace() || byte == b',' || byte == b':';
+		// For numbers remove all trailing non-digit chracters as well.
+		// We do this, because serde_json has to read at least one byte past
+		// the number to know that the number is completed. This is the only
+		// json value for which this read-ahead is required.
+		// Note: A valid json number always ends in a digit.
+		let should_skip = should_skip || (is_number && !byte.is_ascii_digit());
+		if should_skip {
 			end.byte_offset -= 1;
 			if byte == b'\n' {
 				end.line -= 1;
@@ -83,6 +93,7 @@ fn clean_position(src: &[u8], start: &mut Position, end: &mut Position) {
 		}
 	}
 
+	// Recompute column of end position, because we removed newlines from the end.
 	if compute_end_column {
 		if start.line == end.line && start.byte_offset <= end.byte_offset {
 			end.column = start.column + (end.byte_offset - start.byte_offset);
@@ -203,6 +214,10 @@ impl ValuePos {
 
 	pub fn is_array(&self) -> bool {
 		matches!(self.value, Value::Array(..))
+	}
+
+	pub fn is_number(&self) -> bool {
+		matches!(self.value, Value::Primitive(serde_json::Value::Number(_)))
 	}
 
 	pub fn as_object(&self) -> Option<&IndexMap<String, MapEntry>> {
@@ -525,6 +540,19 @@ mod tests {
 
 		let parsed = from_str(json).unwrap();
 		let expected = expect_file!["../tests/positions_from_str.expected.txt"];
+		expected.assert_debug_eq(&parsed);
+	}
+
+	#[test]
+	fn number_position() {
+		let json = indoc! { r#"
+			{
+				"command": ["echo", 12]
+			}
+		"# };
+
+		let parsed = from_str(json).unwrap();
+		let expected = expect_file!["../tests/number_position.expected.txt"];
 		expected.assert_debug_eq(&parsed);
 	}
 

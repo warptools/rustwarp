@@ -1,0 +1,74 @@
+ValuePos {
+    start: Position {
+        line: 1,
+        column: 1,
+        byte_offset: 0,
+    },
+    end: Position {
+        line: 3,
+        column: 2,
+        byte_offset: 28,
+    },
+    value: Object(
+        {
+            "command": MapEntry {
+                value: ValuePos {
+                    start: Position {
+                        line: 2,
+                        column: 13,
+                        byte_offset: 14,
+                    },
+                    end: Position {
+                        line: 2,
+                        column: 25,
+                        byte_offset: 26,
+                    },
+                    value: Array(
+                        [
+                            ValuePos {
+                                start: Position {
+                                    line: 2,
+                                    column: 14,
+                                    byte_offset: 15,
+                                },
+                                end: Position {
+                                    line: 2,
+                                    column: 20,
+                                    byte_offset: 21,
+                                },
+                                value: Primitive(
+                                    String("echo"),
+                                ),
+                            },
+                            ValuePos {
+                                start: Position {
+                                    line: 2,
+                                    column: 22,
+                                    byte_offset: 23,
+                                },
+                                end: Position {
+                                    line: 2,
+                                    column: 24,
+                                    byte_offset: 25,
+                                },
+                                value: Primitive(
+                                    Number(12),
+                                ),
+                            },
+                        ],
+                    ),
+                },
+                key_start: Position {
+                    line: 2,
+                    column: 2,
+                    byte_offset: 3,
+                },
+                key_end: Position {
+                    line: 2,
+                    column: 11,
+                    byte_offset: 12,
+                },
+            },
+        },
+    ),
+}
