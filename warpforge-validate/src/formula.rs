@@ -22,24 +22,33 @@ impl FormulaValidator {
 	}
 
 	fn check(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
-		expect_key(value, "formula", |value| {
-			expect_key(value, "formula.v1", |value| {
-				let mut errors = expect_key(value, "inputs", |value| self.check_inputs(value));
-				errors.extend(expect_key(value, "action", |value| {
-					self.check_action(value)
-				}));
-				errors.extend(expect_key(value, "outputs", |value| {
-					self.check_outputs(value)
-				}));
-
-				errors
+		if self.protoformula {
+			self.check_formula_entries(value)
+		} else {
+			expect_key(value, "formula", |value| {
+				expect_key(value, "formula.v1", |value| {
+					self.check_formula_entries(value)
+				})
 			})
-		})
+		}
+	}
+
+	fn check_formula_entries(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+		let mut errors = expect_key(value, "inputs", |value| self.check_inputs(value));
+		errors.extend(expect_key(value, "action", |value| {
+			self.check_action(value)
+		}));
+		errors.extend(expect_key(value, "outputs", |value| {
+			self.check_outputs(value)
+		}));
+
+		errors
 	}
 
 	fn check_inputs(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		let mut errors = expect_key(value, "/", |value| {
 			expect_string(value, |value| {
+				// TODO: allow pipe input for "/" if pipe points to an oci input. (protoformula only)
 				let Some(oci) = value.strip_prefix("oci:") else {
 					return ValidationErrorWithPath::custom(
 						"formula input '/' currently has to be of type 'oci'",
@@ -73,9 +82,10 @@ impl FormulaValidator {
 				return Vec::with_capacity(0);
 			}
 
-			let allowed_types = match key.get(..1) {
-				Some("/") => &["mount", "ware"][..],
-				Some("$") => &["literal"][..],
+			let allowed_types = match (key.get(..1), self.protoformula) {
+				(Some("/"), false) => &["mount", "ware"][..],
+				(Some("/"), true) => &["mount", "ware", "pipe"][..],
+				(Some("$"), _) => &["literal"][..],
 				_ => {
 					return ValidationErrorWithPath::build(
 						"input port should start with '/' or '$'",
@@ -141,7 +151,7 @@ impl FormulaValidator {
 					.finish();
 				}
 			}
-			"ware" => {
+			"ware" | "pipe" => {
 				todo!();
 			}
 			_ => {}
@@ -200,6 +210,7 @@ impl FormulaValidator {
 
 	fn check_outputs(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		expect_object_iterate(value, |(_key, value)| {
+			// TODO: check key not empty
 			let mut errors = expect_key(value, "from", |value| {
 				expect_string(value, |value| {
 					if !value.starts_with('/') {

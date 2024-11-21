@@ -12,6 +12,7 @@ use crate::common::find_byte_offset;
 use crate::error::ValidationErrorWithPath;
 pub use crate::error::{CustomError, Error, Result, TrailingComma, ValidationError};
 use crate::formula::FormulaValidator;
+use crate::plot::PlotValidator;
 
 /// Maximal number of trailing comma errors that we include in validation result.
 const MAX_TRAILING_COMMA: usize = 20;
@@ -30,7 +31,10 @@ pub fn validate_formula(formula: &str) -> Result<ValidatedFormula> {
 }
 
 pub fn validate_plot(plot: &str) -> Result<ValidatedPlot> {
-	todo!()
+	let mut parser = Parser::parse_json_value(plot)?;
+	let errors = PlotValidator::validate(&parser.parsed);
+	parser.append_errors(errors);
+	parser.finish_plot()
 }
 
 pub struct ValidatedFormula {
@@ -162,6 +166,22 @@ impl<'a> Parser<'a> {
 			let parsed = mem::take(&mut self.parsed);
 			match serde_json::from_value(parsed) {
 				Ok(validated) => return Ok(ValidatedFormula { formula: validated }),
+				Err(err) => Some(err),
+			}
+		} else {
+			None
+		};
+
+		self.finish_error(deserialize_err)
+	}
+
+	fn finish_plot(mut self) -> Result<ValidatedPlot> {
+		let deserialize_err = if self.errors.is_empty() {
+			// Setting self.parsed to Value::default here:
+			// Don't use self.parsed anymore from here on.
+			let parsed = mem::take(&mut self.parsed);
+			match serde_json::from_value(parsed) {
+				Ok(validated) => return Ok(ValidatedPlot { plot: validated }),
 				Err(err) => Some(err),
 			}
 		} else {

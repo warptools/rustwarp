@@ -1,10 +1,16 @@
 use std::{collections::HashMap, ops::Range};
 
-use warpforge_validate::{validate_formula, Error, Result, ValidationError};
+use warpforge_validate::{validate_formula, validate_plot, Error, Result, ValidationError};
 
 pub fn check_formula(input: &str) {
 	let (json, locations) = prepare_input(input);
 	let result = validate_formula(&json);
+	check_validation_locations(&result, &json, &locations);
+}
+
+pub fn check_plot(input: &str) {
+	let (json, locations) = prepare_input(input);
+	let result = validate_plot(&json);
 	check_validation_locations(&result, &json, &locations);
 }
 
