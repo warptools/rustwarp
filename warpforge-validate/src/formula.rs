@@ -18,10 +18,14 @@ impl FormulaValidator {
 		parsed: &serde_json::Value,
 		protoformula: bool,
 	) -> Vec<ValidationErrorWithPath> {
-		FormulaValidator { protoformula }.check(parsed)
+		Self { protoformula }.check(parsed)
 	}
 
-	fn check(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
+	pub(crate) fn new(protoformula: bool) -> Self {
+		Self { protoformula }
+	}
+
+	pub(crate) fn check(&mut self, value: &serde_json::Value) -> Vec<ValidationErrorWithPath> {
 		if self.protoformula {
 			self.check_formula_entries(value)
 		} else {
@@ -30,6 +34,16 @@ impl FormulaValidator {
 					self.check_formula_entries(value)
 				})
 			})
+		}
+	}
+
+	pub(crate) fn allowed_input_types(port: &str, protoformula: bool) -> &'static [&'static str] {
+		match (port.get(..1), protoformula) {
+			(Some("/"), false) => &["mount", "ware"][..],
+			(Some("/"), true) => &["mount", "ware", "pipe"][..],
+			(Some("$"), false) => &["literal"][..],
+			(Some("$"), true) => &["literal", "pipe"][..],
+			_ => &[][..],
 		}
 	}
 
@@ -82,22 +96,16 @@ impl FormulaValidator {
 				return Vec::with_capacity(0);
 			}
 
-			let allowed_types = match (key.get(..1), self.protoformula) {
-				(Some("/"), false) => &["mount", "ware"][..],
-				(Some("/"), true) => &["mount", "ware", "pipe"][..],
-				(Some("$"), _) => &["literal"][..],
-				_ => {
-					return ValidationErrorWithPath::build(
-						"input port should start with '/' or '$'",
-					)
+			let allowed_types = Self::allowed_input_types(key, self.protoformula);
+			if allowed_types.is_empty() {
+				return ValidationErrorWithPath::build("input port should start with '/' or '$'")
 					.with_target(TargetHint::Key)
 					.with_label("invalid port")
 					.with_note(
 						"use '/some/path' to mount an input or '$VAR' to set an env variable.",
 					)
 					.finish();
-				}
-			};
+			}
 
 			expect_string(value, |value| self.check_input_value(value, allowed_types))
 		}));
@@ -124,6 +132,7 @@ impl FormulaValidator {
 		}
 
 		match discriminant {
+			"pipe" => {} // Pipes are checked in the plot validation code.
 			"literal" => {
 				if value.next().is_none() {
 					return ValidationErrorWithPath::build("input type 'literal' requires value")
@@ -151,7 +160,7 @@ impl FormulaValidator {
 					.finish();
 				}
 			}
-			"ware" | "pipe" => {
+			"ware" => {
 				todo!();
 			}
 			_ => {}

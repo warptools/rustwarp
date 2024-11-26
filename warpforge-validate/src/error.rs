@@ -3,7 +3,7 @@ use std::{
 	ops::Range,
 };
 
-use json_with_position::{JsonPath, TargetHint};
+use json_with_position::{JsonPath, PathPart, TargetHint};
 
 use crate::common::find_byte_offset;
 
@@ -153,5 +153,31 @@ impl PathErrorBuilder {
 			target: self.target,
 			inner: ValidationError::Custom(self.error),
 		}]
+	}
+}
+
+pub(crate) trait VecValidationErrorWithPath {
+	fn prepend_object_index(&mut self, index: &str);
+	fn prepend_array_index(&mut self, index: usize);
+	fn prepend_object_indices(&mut self, indices: &[&str]);
+}
+
+impl VecValidationErrorWithPath for Vec<ValidationErrorWithPath> {
+	fn prepend_object_index(&mut self, index: &str) {
+		for error in self {
+			error.path.prepend(PathPart::Object(index.to_owned()));
+		}
+	}
+
+	fn prepend_array_index(&mut self, index: usize) {
+		for error in self {
+			error.path.prepend(PathPart::Array(index));
+		}
+	}
+
+	fn prepend_object_indices(&mut self, indices: &[&str]) {
+		for index in indices.iter().rev() {
+			self.prepend_object_index(index);
+		}
 	}
 }

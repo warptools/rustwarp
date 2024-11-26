@@ -1,6 +1,4 @@
-use json_with_position::PathPart;
-
-use crate::error::ValidationErrorWithPath;
+use crate::error::{ValidationErrorWithPath, VecValidationErrorWithPath};
 
 pub(crate) fn find_byte_offset(src: &[u8], line: usize, column: usize) -> Option<usize> {
 	let mut walk_line = 1;
@@ -34,9 +32,7 @@ pub(crate) fn expect_key<'a>(
 	};
 
 	let mut errors = inspect(target);
-	for error in &mut errors {
-		error.path.prepend(PathPart::Object(key.to_owned()));
-	}
+	errors.prepend_object_index(key);
 	errors
 }
 
@@ -55,9 +51,7 @@ pub(crate) fn optional_key<'a>(
 	};
 
 	let mut errors = inspect(target);
-	for error in &mut errors {
-		error.path.prepend(PathPart::Object(key.to_owned()));
-	}
+	errors.prepend_object_index(key);
 	errors
 }
 
@@ -72,9 +66,7 @@ pub(crate) fn expect_index<'a>(
 	};
 
 	let mut errors = inspect(target);
-	for error in &mut errors {
-		error.path.prepend(PathPart::Array(index));
-	}
+	errors.prepend_array_index(index);
 	errors
 }
 
@@ -89,10 +81,9 @@ pub(crate) fn expect_object_iterate<'a>(
 
 	let mut errors = Vec::with_capacity(0);
 	for entry in object {
-		for mut error in inspect(entry) {
-			error.path.prepend(PathPart::Object(entry.0.to_owned()));
-			errors.push(error);
-		}
+		let mut new_errors = inspect(entry);
+		new_errors.prepend_object_index(entry.0);
+		errors.extend(new_errors);
 	}
 	errors
 }
@@ -116,10 +107,9 @@ pub(crate) fn expect_array_iterate<'a>(
 
 	let mut errors = Vec::with_capacity(0);
 	for (index, entry) in array.iter().enumerate() {
-		for mut error in inspect(entry) {
-			error.path.prepend(PathPart::Array(index));
-			errors.push(error);
-		}
+		let mut new_errors = inspect(entry);
+		new_errors.prepend_array_index(index);
+		errors.extend(new_errors);
 	}
 	errors
 }
