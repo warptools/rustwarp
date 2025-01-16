@@ -36,6 +36,7 @@ Depot Internals
 Sometimes an example makes things clear fast, so let's start with that, and then explain it later ;)
 
 ```
+depot/1000/gar/treecas/{...cas...}
 depot/1000/riotar/unpack/{...cas...}
 depot/1000/riotar/pack/{...cas...}.tgz
 depot/1000/riotar/xform/{... symlink of pack hash to resultant unpack hash ...}
@@ -48,7 +49,9 @@ depot/staging/{...uuid...} // mounted into ersatz for live output gathering!
 You probably have questions.
 
 - Why "pack" and "unpack" directories?
-	- -> Jump down to [#presentation-dirs-vs-packed-caches](the presentation dirs vs packed caches).
+	- (This depends a bit on each pack system plugin, but most have something of this sort.)
+	- -> Jump down to [#presentation-dirs-vs-packed-caches](the presentation dirs vs packed caches) for more on this.
+	- (For git, the presentation dir is called "worktrees", for gar it's called "treecas", for riotar it's called "unpack"; language from each system was used.)
 - Why the "git" vs "riotar" vs {etc} directories?
 	- Because each type of packing has its own hashing strategy, so they need to be namespaced.
 	- And because [#pack-systems-are-plugins](pack systems are plugins), and some have their own individual interesting internal implementation details
